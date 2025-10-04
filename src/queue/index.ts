@@ -1,4 +1,4 @@
-import { Queue } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 import { connection } from '~/config/redis';
 
 export const JobType = {
@@ -41,6 +41,8 @@ export const queue = new Queue<unknown, JobResult>(QUEUE_NAME, {
     }
   }
 });
+
+export const queueEvents = new QueueEvents(QUEUE_NAME, { connection });
 
 export const addJob = async (name: string, data: unknown) => {
   return queue.add(name, data);

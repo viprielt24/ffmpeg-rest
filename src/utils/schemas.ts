@@ -3,9 +3,7 @@ import { z } from '@hono/zod-openapi';
 /**
  * Common file upload schema
  */
-export const FileSchema = z.instanceof(File).openapi({
-  type: 'string',
-  format: 'binary',
+export const FileSchema = z.file().openapi({
   description: 'Media file to process'
 });
 
