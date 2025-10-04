@@ -6,8 +6,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
 import path from 'path';
 
-const TEST_DIR = path.join(process.cwd(), 'test-outputs');
-const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures');
+const TEST_DIR = path.join(process.cwd(), 'test-outputs', 'audio');
+const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures', 'audio');
 
 describe('processAudioToMp3', () => {
   beforeEach(() => {
