@@ -68,8 +68,6 @@ export async function processAudioToWav(job: Job<AudioToWavJobData>): Promise<Jo
       'pcm_s16le',
       '-ar',
       '44100',
-      '-ac',
-      '2',
       '-y',
       outputPath
     ]);

@@ -94,9 +94,9 @@ function createTestWavFile(outputPath: string): void {
   );
 }
 
-function createTestMp3File(outputPath: string): void {
+function createTestMp3File(outputPath: string, channels: number = 2): void {
   execSync(
-    `ffmpeg -f lavfi -i "sine=frequency=1000:duration=1" -codec:a libmp3lame -qscale:a 2 -y "${outputPath}"`,
+    `ffmpeg -f lavfi -i "sine=frequency=1000:duration=1" -ac ${channels} -codec:a libmp3lame -qscale:a 2 -y "${outputPath}"`,
     { stdio: 'pipe' }
   );
 }
@@ -176,5 +176,55 @@ describe('processAudioToWav', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
+  });
+
+  it('should preserve mono channel when converting mono MP3 to WAV', async () => {
+    const inputPath = path.join(FIXTURES_DIR, 'test-audio-mono.mp3');
+    const outputPath = path.join(TEST_DIR, 'output-mono.wav');
+
+    createTestMp3File(inputPath, 1);
+
+    const job = {
+      data: {
+        inputPath,
+        outputPath
+      }
+    } as Job<AudioToWavJobData>;
+
+    const result = await processAudioToWav(job);
+
+    expect(result.success).toBe(true);
+    expect(result.outputPath).toBe(outputPath);
+    expect(existsSync(outputPath)).toBe(true);
+
+    const fileInfo = execSync(`ffprobe -v error -show_streams -select_streams a -of json "${outputPath}"`).toString();
+    const metadata = JSON.parse(fileInfo);
+    expect(metadata.streams[0].channels).toBe(1);
+    expect(metadata.streams[0].codec_name).toBe('pcm_s16le');
+  });
+
+  it('should preserve stereo channels when converting stereo MP3 to WAV', async () => {
+    const inputPath = path.join(FIXTURES_DIR, 'test-audio-stereo.mp3');
+    const outputPath = path.join(TEST_DIR, 'output-stereo.wav');
+
+    createTestMp3File(inputPath, 2);
+
+    const job = {
+      data: {
+        inputPath,
+        outputPath
+      }
+    } as Job<AudioToWavJobData>;
+
+    const result = await processAudioToWav(job);
+
+    expect(result.success).toBe(true);
+    expect(result.outputPath).toBe(outputPath);
+    expect(existsSync(outputPath)).toBe(true);
+
+    const fileInfo = execSync(`ffprobe -v error -show_streams -select_streams a -of json "${outputPath}"`).toString();
+    const metadata = JSON.parse(fileInfo);
+    expect(metadata.streams[0].channels).toBe(2);
+    expect(metadata.streams[0].codec_name).toBe('pcm_s16le');
   });
 });
