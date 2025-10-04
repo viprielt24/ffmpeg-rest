@@ -7,7 +7,7 @@ import { Worker } from 'bullmq';
 import { connection } from '~/config/redis';
 import { QUEUE_NAME, JobType } from '~/queue';
 import type { JobResult } from '~/queue';
-import { processVideoToMp4, processVideoExtractAudio } from '~/queue/video/processor';
+import { processVideoToMp4, processVideoExtractAudio, processVideoExtractFrames } from '~/queue/video/processor';
 
 const TEST_DIR = path.join(process.cwd(), 'test-outputs', 'video-controller');
 const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures', 'video-controller');
@@ -29,6 +29,8 @@ describe('Video Controller', () => {
             return processVideoToMp4(job as never);
           case JobType.VIDEO_EXTRACT_AUDIO:
             return processVideoExtractAudio(job as never);
+          case JobType.VIDEO_EXTRACT_FRAMES:
+            return processVideoExtractFrames(job as never);
           default:
             throw new Error(`Unknown job type: ${job.name}`);
         }
@@ -152,6 +154,91 @@ describe('Video Controller', () => {
       formData.append('file', file);
 
       const res = await app.request('/video/audio', {
+        method: 'POST',
+        body: formData
+      });
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json).toHaveProperty('error');
+    });
+  });
+
+  describe('POST /video/frames', () => {
+    it('should extract frames as ZIP archive', async () => {
+      const inputPath = path.join(FIXTURES_DIR, 'test-frames.avi');
+      createTestAviFile(inputPath);
+
+      const formData = new FormData();
+      const fileBuffer = readFileSync(inputPath);
+      const file = new File([fileBuffer], 'test.avi', {
+        type: 'video/x-msvideo'
+      });
+      formData.append('file', file);
+
+      const res = await app.request('/video/frames?fps=1&compress=zip', {
+        method: 'POST',
+        body: formData
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/zip');
+
+      const arrayBuffer = await res.arrayBuffer();
+      expect(arrayBuffer.byteLength).toBeGreaterThan(0);
+    });
+
+    it('should extract frames as GZIP archive', async () => {
+      const inputPath = path.join(FIXTURES_DIR, 'test-frames-gzip.avi');
+      createTestAviFile(inputPath);
+
+      const formData = new FormData();
+      const fileBuffer = readFileSync(inputPath);
+      const file = new File([fileBuffer], 'test.avi', {
+        type: 'video/x-msvideo'
+      });
+      formData.append('file', file);
+
+      const res = await app.request('/video/frames?fps=1&compress=gzip', {
+        method: 'POST',
+        body: formData
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/gzip');
+
+      const arrayBuffer = await res.arrayBuffer();
+      expect(arrayBuffer.byteLength).toBeGreaterThan(0);
+    });
+
+    it('should return 400 when compress parameter is missing', async () => {
+      const inputPath = path.join(FIXTURES_DIR, 'test-no-compress.avi');
+      createTestAviFile(inputPath);
+
+      const formData = new FormData();
+      const fileBuffer = readFileSync(inputPath);
+      const file = new File([fileBuffer], 'test.avi', {
+        type: 'video/x-msvideo'
+      });
+      formData.append('file', file);
+
+      const res = await app.request('/video/frames?fps=1', {
+        method: 'POST',
+        body: formData
+      });
+
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json).toHaveProperty('error');
+      expect(json.error).toContain('compress parameter is required');
+    });
+
+    it('should return 400 for invalid file', async () => {
+      const formData = new FormData();
+      const file = new File(['invalid video data'], 'invalid.avi', { type: 'video/x-msvideo' });
+      formData.append('file', file);
+
+      const res = await app.request('/video/frames?fps=1&compress=zip', {
         method: 'POST',
         body: formData
       });
