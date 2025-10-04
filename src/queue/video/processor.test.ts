@@ -6,8 +6,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync, readdirSync } from 'fs';
 import { execSync } from 'child_process';
 import path from 'path';
 
-const TEST_DIR = path.join(process.cwd(), 'test-outputs');
-const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures');
+const TEST_DIR = path.join(process.cwd(), 'test-outputs', 'video');
+const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures', 'video');
 
 describe('processVideoToMp4', () => {
   beforeEach(() => {
