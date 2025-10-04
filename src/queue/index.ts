@@ -13,13 +13,13 @@ export const JobType = {
 
 export type JobTypeName = (typeof JobType)[keyof typeof JobType];
 
-export type JobResult = {
+export interface JobResult {
   success: boolean;
   outputPath?: string;
   outputPaths?: string[];
   metadata?: Record<string, unknown>;
   error?: string;
-};
+}
 
 export const QUEUE_NAME = 'ffmpeg-jobs';
 

@@ -62,8 +62,9 @@ describe('processMediaProbe', () => {
     expect(result.metadata).toBeDefined();
     expect(result.metadata?.['format']).toBeDefined();
 
-    const metadata = result.metadata as any;
-    expect(metadata?.format?.format_name).toContain('mp3');
+    const metadata = result.metadata as Record<string, unknown>;
+    const format = metadata?.['format'] as Record<string, unknown>;
+    expect(format?.['format_name']).toContain('mp3');
   });
 
   it('should return error when input file does not exist', async () => {
@@ -108,8 +109,7 @@ function createTestVideoFile(outputPath: string): void {
 }
 
 function createTestAudioFile(outputPath: string): void {
-  execSync(
-    `ffmpeg -f lavfi -i "sine=frequency=1000:duration=1" -codec:a libmp3lame -qscale:a 2 -y "${outputPath}"`,
-    { stdio: 'pipe' }
-  );
+  execSync(`ffmpeg -f lavfi -i "sine=frequency=1000:duration=1" -codec:a libmp3lame -qscale:a 2 -y "${outputPath}"`, {
+    stdio: 'pipe'
+  });
 }

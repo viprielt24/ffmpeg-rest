@@ -122,7 +122,7 @@ function createTestWavFile(outputPath: string): void {
   );
 }
 
-function createTestMp3File(outputPath: string, channels: number = 2): void {
+function createTestMp3File(outputPath: string, channels = 2): void {
   execSync(
     `ffmpeg -f lavfi -i "sine=frequency=1000:duration=1" -ac ${channels} -codec:a libmp3lame -qscale:a 2 -y "${outputPath}"`,
     { stdio: 'pipe' }

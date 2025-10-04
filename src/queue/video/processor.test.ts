@@ -199,7 +199,7 @@ describe('processVideoExtractFrames', () => {
 
     expect(result.success).toBe(true);
     expect(result.outputPaths).toBeDefined();
-    expect(result.outputPaths!.length).toBeGreaterThan(0);
+    expect(result.outputPaths?.length).toBeGreaterThan(0);
     expect(existsSync(outputDir)).toBe(true);
 
     const files = readdirSync(outputDir);
@@ -228,7 +228,9 @@ describe('processVideoExtractFrames', () => {
     expect(result.success).toBe(true);
     expect(result.outputPath).toBeDefined();
     expect(result.outputPath).toContain('.zip');
-    expect(existsSync(result.outputPath!)).toBe(true);
+    if (result.outputPath) {
+      expect(existsSync(result.outputPath)).toBe(true);
+    }
   });
 
   it('should create compressed gzip archive when compress is gzip', async () => {
@@ -252,7 +254,9 @@ describe('processVideoExtractFrames', () => {
     expect(result.success).toBe(true);
     expect(result.outputPath).toBeDefined();
     expect(result.outputPath).toContain('.tar.gz');
-    expect(existsSync(result.outputPath!)).toBe(true);
+    if (result.outputPath) {
+      expect(existsSync(result.outputPath)).toBe(true);
+    }
   });
 
   it('should extract frames as JPEG with custom quality', async () => {
@@ -275,7 +279,7 @@ describe('processVideoExtractFrames', () => {
 
     expect(result.success).toBe(true);
     expect(result.outputPaths).toBeDefined();
-    expect(result.outputPaths!.length).toBeGreaterThan(0);
+    expect(result.outputPaths?.length).toBeGreaterThan(0);
     expect(existsSync(outputDir)).toBe(true);
 
     const files = readdirSync(outputDir);
