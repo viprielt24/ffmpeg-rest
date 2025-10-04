@@ -34,7 +34,8 @@ describe('processImageToJpg', () => {
     const job = {
       data: {
         inputPath,
-        outputPath
+        outputPath,
+        quality: 2
       }
     } as Job<ImageToJpgJobData>;
 
@@ -56,7 +57,8 @@ describe('processImageToJpg', () => {
     const job = {
       data: {
         inputPath,
-        outputPath
+        outputPath,
+        quality: 2
       }
     } as Job<ImageToJpgJobData>;
 
@@ -76,7 +78,8 @@ describe('processImageToJpg', () => {
     const job = {
       data: {
         inputPath,
-        outputPath
+        outputPath,
+        quality: 2
       }
     } as Job<ImageToJpgJobData>;
 
@@ -84,6 +87,27 @@ describe('processImageToJpg', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
+  });
+
+  it('should convert PNG to JPG with custom quality', async () => {
+    const inputPath = path.join(FIXTURES_DIR, 'test-image-quality.png');
+    const outputPath = path.join(TEST_DIR, 'output-quality10.jpg');
+
+    createTestPngFile(inputPath);
+
+    const job = {
+      data: {
+        inputPath,
+        outputPath,
+        quality: 10
+      }
+    } as Job<ImageToJpgJobData>;
+
+    const result = await processImageToJpg(job);
+
+    expect(result.success).toBe(true);
+    expect(result.outputPath).toBe(outputPath);
+    expect(existsSync(outputPath)).toBe(true);
   });
 });
 

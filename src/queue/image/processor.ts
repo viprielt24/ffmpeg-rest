@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 const PROCESSING_TIMEOUT = 600000;
 
 export async function processImageToJpg(job: Job<ImageToJpgJobData>): Promise<JobResult> {
-  const { inputPath, outputPath } = job.data;
+  const { inputPath, outputPath, quality } = job.data;
 
   if (!existsSync(inputPath)) {
     return {
@@ -29,7 +29,7 @@ export async function processImageToJpg(job: Job<ImageToJpgJobData>): Promise<Jo
       '-i',
       inputPath,
       '-q:v',
-      '2',
+      quality.toString(),
       '-y',
       outputPath
     ], { timeout: PROCESSING_TIMEOUT });
