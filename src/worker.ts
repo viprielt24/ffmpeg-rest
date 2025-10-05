@@ -3,6 +3,7 @@ import { connection } from '~/config/redis';
 import { env } from '~/config/env';
 import { QUEUE_NAME, JobType } from '~/queue';
 import type { JobResult } from '~/queue';
+import { checkS3Health } from '~/utils/storage';
 
 import { processAudioToMp3, processAudioToWav } from '~/queue/audio/processor';
 import { processVideoToMp4, processVideoExtractAudio, processVideoExtractFrames } from '~/queue/video/processor';
@@ -58,4 +59,5 @@ if (env.STORAGE_MODE === 's3') {
   console.log(`   S3 Bucket: ${env.S3_BUCKET}`);
   console.log(`   S3 Region: ${env.S3_REGION}`);
   console.log(`   S3 Prefix: ${env.S3_PATH_PREFIX}`);
+  await checkS3Health();
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
 import { processMediaProbe } from './processor';
 import type { Job } from 'bullmq';
 import type { MediaProbeJobData } from './schemas';

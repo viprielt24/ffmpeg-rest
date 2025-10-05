@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { readFile } from 'fs/promises';
 import { env } from '~/config/env';
 import { randomUUID } from 'crypto';
@@ -6,6 +6,35 @@ import { randomUUID } from 'crypto';
 export interface UploadResult {
   url: string;
   key: string;
+}
+
+export async function checkS3Health(): Promise<void> {
+  if (env.STORAGE_MODE !== 's3') {
+    return;
+  }
+
+  if (!env.S3_ENDPOINT || !env.S3_REGION || !env.S3_BUCKET ||
+      !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY) {
+    throw new Error('S3 mode enabled but configuration is incomplete');
+  }
+
+  const s3Client = new S3Client({
+    endpoint: env.S3_ENDPOINT,
+    region: env.S3_REGION,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: env.S3_ACCESS_KEY_ID,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY
+    }
+  });
+
+  try {
+    await s3Client.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
+    console.log('✅ S3 health check passed');
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`S3 health check failed: ${errorMessage}`);
+  }
 }
 
 export async function uploadToS3(
