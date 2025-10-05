@@ -1,4 +1,8 @@
+FROM jrottenberg/ffmpeg:7.1-scratch AS ffmpeg
+
 FROM node:22.20.0-alpine AS base
+
+COPY --from=ffmpeg /usr/local /usr/local
 
 WORKDIR /app
 
@@ -13,7 +17,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build:server
+RUN npm run build
 
 FROM base AS runtime
 
@@ -28,4 +32,4 @@ USER nodejs
 
 EXPOSE 3000
 
-CMD ["node", "dist/server.js"]
+CMD ["npm", "start"]
