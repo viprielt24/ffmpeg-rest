@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { connection } from '~/config/redis';
+import { connection, checkRedisHealth } from '~/config/redis';
 import { env } from '~/config/env';
 import { QUEUE_NAME, JobType } from '~/queue';
 import type { JobResult } from '~/queue';
@@ -9,6 +9,8 @@ import { processAudioToMp3, processAudioToWav } from '~/queue/audio/processor';
 import { processVideoToMp4, processVideoExtractAudio, processVideoExtractFrames } from '~/queue/video/processor';
 import { processImageToJpg } from '~/queue/image/processor';
 import { processMediaProbe } from '~/queue/media/processor';
+
+await checkRedisHealth();
 
 const worker = new Worker<unknown, JobResult>(
   QUEUE_NAME,
