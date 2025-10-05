@@ -4,6 +4,10 @@ import { LocalstackContainer, type StartedLocalStackContainer } from '@testconta
 import { S3Client, CreateBucketCommand } from '@aws-sdk/client-s3';
 import path from 'path';
 
+const IMAGE_NAME = 'ffmpeg-rest-test';
+const REDIS_ALIAS = 'redis';
+const LOCALSTACK_ALIAS = 'localstack';
+
 interface IntegrationSetupResult {
   apiUrl: string;
   appContainer: StartedTestContainer;
@@ -19,6 +23,8 @@ let apiUrl: string | null = null;
 let currentMode: 'stateless' | 's3' | null = null;
 let setupInFlight: Promise<void> | null = null;
 let s3BucketInitialized = false;
+let imageBuildPromise: Promise<void> | null = null;
+let imageBuilt = false;
 
 export async function setupIntegrationTests(options?: { s3Mode?: boolean }): Promise<IntegrationSetupResult> {
   const requestedMode = options?.s3Mode ? 's3' : 'stateless';
@@ -41,7 +47,7 @@ export async function setupIntegrationTests(options?: { s3Mode?: boolean }): Pro
   currentMode = requestedMode;
 
   const environment: Record<string, string> = {
-    REDIS_URL: 'redis://redis:6379',
+    REDIS_URL: `redis://${REDIS_ALIAS}:6379`,
     STORAGE_MODE: 'stateless',
     NODE_ENV: 'test'
   };
@@ -53,18 +59,18 @@ export async function setupIntegrationTests(options?: { s3Mode?: boolean }): Pro
     console.log('Starting Redis container...');
     redisContainer = await new RedisContainer('redis:7.4-alpine')
       .withNetwork(network)
-      .withNetworkAliases('redis')
+      .withNetworkAliases(REDIS_ALIAS)
       .start();
 
     if (options?.s3Mode) {
       console.log('Starting LocalStack container...');
       localstackContainer = await new LocalstackContainer('localstack/localstack:latest')
         .withNetwork(network)
-        .withNetworkAliases('localstack')
+        .withNetworkAliases(LOCALSTACK_ALIAS)
         .start();
 
       const localstackHostEndpoint = localstackContainer.getConnectionUri();
-      const localstackInternalEndpoint = 'http://localstack:4566';
+      const localstackInternalEndpoint = `http://${LOCALSTACK_ALIAS}:4566`;
 
       environment['STORAGE_MODE'] = 's3';
       environment['S3_ENDPOINT'] = localstackInternalEndpoint;
@@ -98,15 +104,10 @@ export async function setupIntegrationTests(options?: { s3Mode?: boolean }): Pro
       }
     }
 
-    console.log('Building application image...');
-    const imageName = 'ffmpeg-rest-test';
-
-    await GenericContainer.fromDockerfile(path.join(__dirname, '../..'))
-      .withPlatform('linux/amd64')
-      .build(imageName, { deleteOnExit: false });
+    await ensureImageBuilt();
 
     console.log('Starting application container...');
-    appContainer = await new GenericContainer(imageName)
+    appContainer = await new GenericContainer(IMAGE_NAME)
       .withNetwork(network)
       .withEnvironment(environment)
       .withExposedPorts(3000)
@@ -170,6 +171,31 @@ export function getLocalStackContainer() {
     throw new Error('LocalStack not available. Call setupIntegrationTests({ s3Mode: true }) first.');
   }
   return localstackContainer;
+}
+
+async function ensureImageBuilt() {
+  if (imageBuilt) {
+    return;
+  }
+
+  if (!imageBuildPromise) {
+    console.log('Building application image...');
+    imageBuildPromise = GenericContainer.fromDockerfile(path.join(__dirname, '../..'))
+      .withPlatform('linux/amd64')
+      .build(IMAGE_NAME, { deleteOnExit: false })
+      .then(() => {
+        imageBuilt = true;
+      })
+      .catch((error) => {
+        imageBuilt = false;
+        throw error;
+      })
+      .finally(() => {
+        imageBuildPromise = null;
+      });
+  }
+
+  await imageBuildPromise;
 }
 
 function buildResult(): IntegrationSetupResult {
