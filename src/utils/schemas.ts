@@ -149,3 +149,11 @@ export const ProbeResponseSchema = z
     )
   })
   .openapi('ProbeResponse');
+
+export const UrlResponseSchema = z
+  .object({
+    url: z.url().openapi({
+      example: 'https://pub-xxx.r2.dev/ffmpeg-rest/2025-01-05-abc123/output.mp3'
+    })
+  })
+  .openapi('UrlResponse');

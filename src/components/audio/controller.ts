@@ -1,5 +1,5 @@
 import type { OpenAPIHono } from '@hono/zod-openapi';
-import { audioToMp3Route, audioToWavRoute } from './schemas';
+import { audioToMp3Route, audioToMp3UrlRoute, audioToWavRoute, audioToWavUrlRoute } from './schemas';
 import { addJob, JobType, queueEvents } from '~/queue';
 import { env } from '~/config/env';
 import { mkdir, writeFile, readFile, rm } from 'fs/promises';
@@ -35,7 +35,6 @@ export function registerAudioRoutes(app: OpenAPIHono) {
       }
 
       const outputBuffer = await readFile(result.outputPath);
-
       await rm(jobDir, { recursive: true, force: true });
 
       return c.body(new Uint8Array(outputBuffer), 200, {
@@ -75,13 +74,89 @@ export function registerAudioRoutes(app: OpenAPIHono) {
       }
 
       const outputBuffer = await readFile(result.outputPath);
-
       await rm(jobDir, { recursive: true, force: true });
 
       return c.body(new Uint8Array(outputBuffer), 200, {
         'Content-Type': 'audio/wav',
         'Content-Disposition': `attachment; filename="${file.name.replace(/\.[^.]+$/, '')}.wav"`
       });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return c.json({ error: 'Processing failed', message: errorMessage }, 500);
+    }
+  });
+
+  app.openapi(audioToMp3UrlRoute, async (c) => {
+    try {
+      if (env.STORAGE_MODE !== 's3') {
+        return c.json({ error: 'S3 mode not enabled' }, 400);
+      }
+
+      const { file } = c.req.valid('form');
+
+      const jobId = randomUUID();
+      const jobDir = path.join(env.TEMP_DIR, jobId);
+      await mkdir(jobDir, { recursive: true });
+
+      const inputPath = path.join(jobDir, 'input');
+      const outputPath = path.join(jobDir, 'output.mp3');
+
+      const arrayBuffer = await file.arrayBuffer();
+      await writeFile(inputPath, Buffer.from(arrayBuffer));
+
+      const job = await addJob(JobType.AUDIO_TO_MP3, {
+        inputPath,
+        outputPath,
+        quality: 2
+      });
+
+      const result = await job.waitUntilFinished(queueEvents);
+
+      if (!result.success || !result.outputUrl) {
+        await rm(jobDir, { recursive: true, force: true });
+        return c.json({ error: result.error || 'Conversion failed' }, 400);
+      }
+
+      await rm(jobDir, { recursive: true, force: true });
+      return c.json({ url: result.outputUrl }, 200);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return c.json({ error: 'Processing failed', message: errorMessage }, 500);
+    }
+  });
+
+  app.openapi(audioToWavUrlRoute, async (c) => {
+    try {
+      if (env.STORAGE_MODE !== 's3') {
+        return c.json({ error: 'S3 mode not enabled' }, 400);
+      }
+
+      const { file } = c.req.valid('form');
+
+      const jobId = randomUUID();
+      const jobDir = path.join(env.TEMP_DIR, jobId);
+      await mkdir(jobDir, { recursive: true });
+
+      const inputPath = path.join(jobDir, 'input');
+      const outputPath = path.join(jobDir, 'output.wav');
+
+      const arrayBuffer = await file.arrayBuffer();
+      await writeFile(inputPath, Buffer.from(arrayBuffer));
+
+      const job = await addJob(JobType.AUDIO_TO_WAV, {
+        inputPath,
+        outputPath
+      });
+
+      const result = await job.waitUntilFinished(queueEvents);
+
+      if (!result.success || !result.outputUrl) {
+        await rm(jobDir, { recursive: true, force: true });
+        return c.json({ error: result.error || 'Conversion failed' }, 400);
+      }
+
+      await rm(jobDir, { recursive: true, force: true });
+      return c.json({ url: result.outputUrl }, 200);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       return c.json({ error: 'Processing failed', message: errorMessage }, 500);

@@ -7,7 +7,7 @@ import {
   CompressQuerySchema,
   FilenameParamSchema,
   DeleteQuerySchema,
-  ExtractImagesResponseSchema
+  UrlResponseSchema
 } from '~/utils/schemas';
 
 /**
@@ -45,6 +45,61 @@ export const videoToMp4Route = createRoute({
         }
       },
       description: 'Invalid video file or unsupported format'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Conversion failed'
+    },
+    501: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Not implemented'
+    }
+  }
+});
+
+/**
+ * POST /video/mp4/url - Convert any video format to MP4 and return S3 URL
+ */
+export const videoToMp4UrlRoute = createRoute({
+  method: 'post',
+  path: '/video/mp4/url',
+  tags: ['Video'],
+  request: {
+    body: {
+      content: {
+        'multipart/form-data': {
+          schema: z.object({
+            file: FileSchema
+          })
+        }
+      },
+      required: true
+    }
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: UrlResponseSchema
+        }
+      },
+      description: 'Video converted to MP4 and uploaded to S3'
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Invalid video file or S3 mode not enabled'
     },
     500: {
       content: {
@@ -124,8 +179,66 @@ export const extractAudioRoute = createRoute({
 });
 
 /**
+ * POST /video/audio/url - Extract audio track from video and return S3 URL
+ * Query: mono=yes|no (default: yes for mono/single channel)
+ */
+export const extractAudioUrlRoute = createRoute({
+  method: 'post',
+  path: '/video/audio/url',
+  tags: ['Video'],
+  request: {
+    params: z.object({}),
+    query: MonoQuerySchema,
+    body: {
+      content: {
+        'multipart/form-data': {
+          schema: z.object({
+            file: FileSchema
+          })
+        }
+      },
+      required: true
+    }
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: UrlResponseSchema
+        }
+      },
+      description: 'Extracted audio track uploaded to S3'
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Invalid video file or S3 mode not enabled'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Extraction failed'
+    },
+    501: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Not implemented'
+    }
+  }
+});
+
+/**
  * POST /video/frames - Extract frames from video as PNG images
- * Query: fps=1 (frames per second), compress=zip|gzip (optional)
+ * Query: fps=1 (frames per second), compress=zip|gzip (required)
  */
 export const extractFramesRoute = createRoute({
   method: 'post',
@@ -147,9 +260,6 @@ export const extractFramesRoute = createRoute({
   responses: {
     200: {
       content: {
-        'application/json': {
-          schema: ExtractImagesResponseSchema
-        },
         'application/zip': {
           schema: FileSchema
         },
@@ -157,7 +267,7 @@ export const extractFramesRoute = createRoute({
           schema: FileSchema
         }
       },
-      description: 'Extracted frames as JSON with download links or compressed archive'
+      description: 'Extracted frames as compressed archive'
     },
     400: {
       content: {
@@ -166,6 +276,63 @@ export const extractFramesRoute = createRoute({
         }
       },
       description: 'Invalid video file or parameters'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Frame extraction failed'
+    },
+    501: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Not implemented'
+    }
+  }
+});
+
+/**
+ * POST /video/frames/url - Extract frames from video and return S3 URL
+ * Query: fps=1 (frames per second), compress=zip|gzip (required)
+ */
+export const extractFramesUrlRoute = createRoute({
+  method: 'post',
+  path: '/video/frames/url',
+  tags: ['Video'],
+  request: {
+    query: FpsQuerySchema.merge(CompressQuerySchema),
+    body: {
+      content: {
+        'multipart/form-data': {
+          schema: z.object({
+            file: FileSchema
+          })
+        }
+      },
+      required: true
+    }
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: UrlResponseSchema
+        }
+      },
+      description: 'Extracted frames archive uploaded to S3'
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: ErrorSchema
+        }
+      },
+      description: 'Invalid video file or S3 mode not enabled'
     },
     500: {
       content: {
