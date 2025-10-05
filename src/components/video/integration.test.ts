@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { setupIntegrationTests, teardownIntegrationTests, getApiUrl, getLocalStackContainer } from '~/test-utils/integration-setup';
+import { ensureBucketExists } from '~/test-utils/s3';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { S3Client, CreateBucketCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, HeadObjectCommand } from '@aws-sdk/client-s3';
 
 describe('Video Processing Integration', () => {
   beforeAll(async () => {
@@ -111,7 +112,7 @@ describe('Video Processing Integration - S3 Mode', () => {
       }
     });
 
-    await s3Client.send(new CreateBucketCommand({ Bucket: TEST_BUCKET }));
+    await ensureBucketExists(s3Client, TEST_BUCKET);
   }, 180000);
 
   afterAll(async () => {
