@@ -17,6 +17,8 @@ export interface JobResult {
   success: boolean;
   outputPath?: string;
   outputPaths?: string[];
+  outputUrl?: string;
+  outputUrls?: string[];
   metadata?: Record<string, unknown>;
   error?: string;
 }
