@@ -18,6 +18,7 @@ export async function setupIntegrationTests() {
   const imageName = 'ffmpeg-rest-test';
 
   await GenericContainer.fromDockerfile(path.join(__dirname, '../..'))
+    .withPlatform('linux/amd64')
     .build(imageName);
 
   console.log('Starting application container...');
@@ -28,7 +29,7 @@ export async function setupIntegrationTests() {
       NODE_ENV: 'test'
     })
     .withExposedPorts(3000)
-    .withWaitStrategy(Wait.forLogMessage(/FFmpeg REST API started/))
+    .withWaitStrategy(Wait.forListeningPorts())
     .start();
 
   apiUrl = `http://${appContainer.getHost()}:${appContainer.getMappedPort(3000)}`;
