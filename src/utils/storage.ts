@@ -1,6 +1,7 @@
 import { S3Client, PutObjectCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { readFile } from 'fs/promises';
 import { env } from '~/config/env';
+import { logger } from '~/config/logger';
 import { randomUUID } from 'crypto';
 
 export interface UploadResult {
@@ -30,9 +31,10 @@ export async function checkS3Health(): Promise<void> {
 
   try {
     await s3Client.send(new HeadBucketCommand({ Bucket: env.S3_BUCKET }));
-    console.log('✅ S3 health check passed');
+    logger.info({ bucket: env.S3_BUCKET }, 'S3 health check passed');
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error({ error: errorMessage }, 'S3 health check failed');
     throw new Error(`S3 health check failed: ${errorMessage}`);
   }
 }

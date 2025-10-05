@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { createApp } from '~/app';
 import { env } from '~/config/env';
 import { checkRedisHealth } from '~/config/redis';
+import { logger } from '~/config/logger';
 
 await checkRedisHealth();
 
@@ -15,10 +16,12 @@ serve(
     port
   },
   (info) => {
-    console.log(`🚀 FFmpeg REST API running on http://localhost:${info.port}`);
-    console.log(`📚 OpenAPI Spec: http://localhost:${info.port}/doc`);
-    console.log(`📖 API Reference: http://localhost:${info.port}/reference`);
-    console.log(`🤖 LLM Documentation: http://localhost:${info.port}/llms.txt`);
-    console.log(`💾 Storage Mode: ${env.STORAGE_MODE.toUpperCase()}`);
+    logger.info({
+      port: info.port,
+      storageMode: env.STORAGE_MODE,
+      openApiSpec: `http://localhost:${info.port}/doc`,
+      apiReference: `http://localhost:${info.port}/reference`,
+      llmDocs: `http://localhost:${info.port}/llms.txt`
+    }, 'FFmpeg REST API started');
   }
 );

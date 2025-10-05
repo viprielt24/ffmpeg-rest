@@ -1,5 +1,6 @@
 import { Queue, QueueEvents } from 'bullmq';
 import { connection } from '~/config/redis';
+import { logger } from '~/config/logger';
 
 export const JobType = {
   AUDIO_TO_MP3: 'audio:mp3',
@@ -47,5 +48,15 @@ export const queue = new Queue<unknown, JobResult>(QUEUE_NAME, {
 export const queueEvents = new QueueEvents(QUEUE_NAME, { connection });
 
 export const addJob = async (name: string, data: unknown) => {
-  return queue.add(name, data);
+  logger.debug({ jobType: name, data }, 'Adding job to queue');
+
+  try {
+    const job = await queue.add(name, data);
+    logger.info({ jobId: job.id, jobType: name }, 'Job added to queue');
+    return job;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error({ jobType: name, error: errorMessage }, 'Failed to add job');
+    throw error;
+  }
 };

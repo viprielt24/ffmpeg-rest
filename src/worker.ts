@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
 import { connection, checkRedisHealth } from '~/config/redis';
 import { env } from '~/config/env';
+import { logger } from '~/config/logger';
 import { QUEUE_NAME, JobType } from '~/queue';
 import type { JobResult } from '~/queue';
 import { checkS3Health } from '~/utils/storage';
@@ -15,7 +16,7 @@ await checkRedisHealth();
 const worker = new Worker<unknown, JobResult>(
   QUEUE_NAME,
   async (job) => {
-    console.log(`Processing job ${job.id} of type ${job.name}`);
+    logger.info({ jobId: job.id, jobType: job.name }, 'Processing job');
 
     switch (job.name) {
       case JobType.AUDIO_TO_MP3:
@@ -43,23 +44,28 @@ const worker = new Worker<unknown, JobResult>(
 );
 
 worker.on('completed', (job) => {
-  console.log(`Job ${job.id} completed successfully`);
+  logger.info({ jobId: job.id }, 'Job completed successfully');
 });
 
 worker.on('failed', (job, err) => {
-  console.error(`Job ${job?.id} failed:`, err.message);
+  logger.error({ jobId: job?.id, error: err.message }, 'Job failed');
 });
 
 worker.on('error', (err) => {
-  console.error('Worker error:', err);
+  logger.error({ error: err.message }, 'Worker error');
 });
 
-console.log(`🔄 Worker started processing queue: ${QUEUE_NAME}`);
-console.log(`⚙️  Concurrency: ${env.WORKER_CONCURRENCY}`);
-console.log(`💾 Storage Mode: ${env.STORAGE_MODE.toUpperCase()}`);
+logger.info({
+  queueName: QUEUE_NAME,
+  concurrency: env.WORKER_CONCURRENCY,
+  storageMode: env.STORAGE_MODE
+}, 'Worker started processing queue');
+
 if (env.STORAGE_MODE === 's3') {
-  console.log(`   S3 Bucket: ${env.S3_BUCKET}`);
-  console.log(`   S3 Region: ${env.S3_REGION}`);
-  console.log(`   S3 Prefix: ${env.S3_PATH_PREFIX}`);
+  logger.info({
+    bucket: env.S3_BUCKET,
+    region: env.S3_REGION,
+    prefix: env.S3_PATH_PREFIX
+  }, 'S3 configuration');
   await checkS3Health();
 }
