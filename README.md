@@ -29,9 +29,13 @@ The API supports two storage modes to fit different deployment scenarios:
 
 Files are processed and returned directly in the HTTP response. Simple and straightforward for immediate consumption.
 
+**Cost Consideration**: On Railway, stateless mode is cheaper than running S3 Mode unless you have free egress at your S3-storage provider (like Cloudflare R2). Railway charges $0.05 per GB egress vs S3's typical $0.09 per GB, but you trade off file persistence - processed files aren't stored for later retrieval.
+
 ### S3 Mode
 
 Processed files are uploaded to S3-compatible storage and a URL is returned. This mode significantly reduces egress bandwidth costs since users download the processed files directly from S3 rather than through your API server. Ideal for production deployments where bandwidth costs matter.
+
+**Why Cloudflare R2?** R2 is S3-compatible and offers no egress fees, which dramatically lowers costs when serving processed media from your bucket via Cloudflare's global network. While any S3-compatible storage works, R2 is the only major provider with zero egress charges—making it the optimal choice for media delivery.
 
 Configure S3 mode by setting `STORAGE_MODE=s3` and providing S3 credentials in your environment variables.
 
