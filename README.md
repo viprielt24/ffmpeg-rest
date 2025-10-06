@@ -16,10 +16,10 @@ A REST API that wraps FFmpeg for media processing operations. Built with Node.js
 
 Convert and process media files through simple HTTP endpoints:
 
-- **Video**: Convert to MP4, extract audio tracks, extract frames at custom FPS
-- **Audio**: Convert to MP3 or WAV formats
-- **Image**: Convert to JPG
-- **Media Info**: Probe files for metadata and stream information
+- **Video**: Convert any video to MP4, extract audio tracks (mono/stereo), extract frames at custom FPS (compressed as ZIP/GZIP)
+- **Audio**: Convert any audio to MP3 or WAV
+- **Image**: Convert any image format to JPG
+- **Media Info**: Probe any media file for metadata and stream information
 
 ## Documentation
 
@@ -100,9 +100,3 @@ Configure S3 mode by setting `STORAGE_MODE=s3` and providing S3 credentials in y
    npm run build
    npm start
    ```
-
-6. **Access the API**
-   - API Server: http://localhost:3000
-   - OpenAPI Spec: http://localhost:3000/doc
-   - API Reference: http://localhost:3000/reference
-   - LLM Documentation: http://localhost:3000/llms.txt
