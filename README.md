@@ -23,7 +23,10 @@ Convert and process media files through simple HTTP endpoints:
 
 ## Storage Modes
 
-The API supports two storage modes to fit different deployment scenarios:
+The API supports two storage modes configured via the `STORAGE_MODE` environment variable:
+
+- **`stateless`** (default) - Files returned directly in HTTP responses
+- **`s3`** - Files uploaded to S3-compatible storage, URLs returned
 
 ### Stateless Mode (Default)
 
