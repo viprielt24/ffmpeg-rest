@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '~/app';
 import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs';
-import { execSync } from 'child_process';
 import path from 'path';
 import { Worker } from 'bullmq';
 import { createTestWorker } from '~/test-utils/worker';
+import { createTestAviFile } from '~/test-utils/fixtures';
+import { getVideoInfo, getAudioChannels, countFilesInZip } from '~/test-utils/probes';
 
 const TEST_DIR = path.join(process.cwd(), 'test-outputs', 'video-controller');
 const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures', 'video-controller');
@@ -53,7 +54,9 @@ describe('Video Controller', () => {
       expect(res.headers.get('content-type')).toBe('video/mp4');
 
       const arrayBuffer = await res.arrayBuffer();
-      expect(arrayBuffer.byteLength).toBeGreaterThan(0);
+      const videoInfo = getVideoInfo(arrayBuffer, TEST_DIR);
+      expect(videoInfo.hasVideo).toBe(true);
+      expect(videoInfo.videoCodec).toBe('h264');
     });
 
     it('should return 400 for invalid file', async () => {
@@ -104,7 +107,8 @@ describe('Video Controller', () => {
       expect(res.headers.get('content-type')).toBe('audio/wav');
 
       const arrayBuffer = await res.arrayBuffer();
-      expect(arrayBuffer.byteLength).toBeGreaterThan(0);
+      const channels = getAudioChannels(arrayBuffer, TEST_DIR);
+      expect(channels).toBe(1);
     });
 
     it('should extract audio preserving channels when mono=no', async () => {
@@ -127,7 +131,8 @@ describe('Video Controller', () => {
       expect(res.headers.get('content-type')).toBe('audio/wav');
 
       const arrayBuffer = await res.arrayBuffer();
-      expect(arrayBuffer.byteLength).toBeGreaterThan(0);
+      const channels = getAudioChannels(arrayBuffer, TEST_DIR);
+      expect(channels).toBe(2);
     });
 
     it('should return 400 for invalid file', async () => {
@@ -167,7 +172,8 @@ describe('Video Controller', () => {
       expect(res.headers.get('content-type')).toBe('application/zip');
 
       const arrayBuffer = await res.arrayBuffer();
-      expect(arrayBuffer.byteLength).toBeGreaterThan(0);
+      const fileCount = countFilesInZip(arrayBuffer, TEST_DIR);
+      expect(fileCount).toBeGreaterThan(0);
     });
 
     it('should extract frames as GZIP archive', async () => {
@@ -231,10 +237,3 @@ describe('Video Controller', () => {
     });
   });
 });
-
-function createTestAviFile(outputPath: string): void {
-  execSync(
-    `ffmpeg -f lavfi -i testsrc=duration=2:size=320x240:rate=30 -f lavfi -i sine=frequency=1000:duration=2:sample_rate=44100 -ac 2 -pix_fmt yuv420p -y "${outputPath}"`,
-    { stdio: 'pipe' }
-  );
-}

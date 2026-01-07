@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '~/app';
 import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs';
-import { execSync } from 'child_process';
 import path from 'path';
 import { Worker } from 'bullmq';
 import { createTestWorker } from '~/test-utils/worker';
+import { createTestAviFile, createTestMp3File } from '~/test-utils/fixtures';
 
 const TEST_DIR = path.join(process.cwd(), 'test-outputs', 'media-controller');
 const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures', 'media-controller');
@@ -35,7 +35,7 @@ describe('Media Controller', () => {
   describe('POST /media/info', () => {
     it('should probe video file and return metadata', async () => {
       const inputPath = path.join(FIXTURES_DIR, 'test-video.avi');
-      createTestVideoFile(inputPath);
+      createTestAviFile(inputPath);
 
       const formData = new FormData();
       const fileBuffer = readFileSync(inputPath);
@@ -62,7 +62,7 @@ describe('Media Controller', () => {
 
     it('should probe audio file and return metadata', async () => {
       const inputPath = path.join(FIXTURES_DIR, 'test-audio.mp3');
-      createTestAudioFile(inputPath);
+      createTestMp3File(inputPath);
 
       const formData = new FormData();
       const fileBuffer = readFileSync(inputPath);
@@ -112,16 +112,3 @@ describe('Media Controller', () => {
     });
   });
 });
-
-function createTestVideoFile(outputPath: string): void {
-  execSync(
-    `ffmpeg -f lavfi -i testsrc=duration=2:size=320x240:rate=30 -f lavfi -i sine=frequency=1000:duration=2:sample_rate=44100 -ac 2 -pix_fmt yuv420p -y "${outputPath}"`,
-    { stdio: 'pipe' }
-  );
-}
-
-function createTestAudioFile(outputPath: string): void {
-  execSync(`ffmpeg -f lavfi -i "sine=frequency=1000:duration=1" -codec:a libmp3lame -qscale:a 2 -y "${outputPath}"`, {
-    stdio: 'pipe'
-  });
-}

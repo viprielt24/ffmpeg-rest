@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '~/app';
 import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs';
-import { execSync } from 'child_process';
 import path from 'path';
 import { Worker } from 'bullmq';
 import { createTestWorker } from '~/test-utils/worker';
+import { createTestWavFile, createTestMp3File } from '~/test-utils/fixtures';
+import { getAudioInfo } from '~/test-utils/probes';
 
 const TEST_DIR = path.join(process.cwd(), 'test-outputs', 'audio-controller');
 const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures', 'audio-controller');
@@ -53,7 +54,8 @@ describe('Audio Controller', () => {
       expect(res.headers.get('content-type')).toBe('audio/mpeg');
 
       const arrayBuffer = await res.arrayBuffer();
-      expect(arrayBuffer.byteLength).toBeGreaterThan(0);
+      const audioInfo = getAudioInfo(arrayBuffer, TEST_DIR);
+      expect(audioInfo.codec).toBe('mp3');
     });
 
     it('should return 400 for invalid file', async () => {
@@ -104,7 +106,8 @@ describe('Audio Controller', () => {
       expect(res.headers.get('content-type')).toBe('audio/wav');
 
       const arrayBuffer = await res.arrayBuffer();
-      expect(arrayBuffer.byteLength).toBeGreaterThan(0);
+      const audioInfo = getAudioInfo(arrayBuffer, TEST_DIR);
+      expect(audioInfo.codec).toBe('pcm_s16le');
     });
 
     it('should return 400 for invalid file', async () => {
@@ -123,13 +126,3 @@ describe('Audio Controller', () => {
     });
   });
 });
-
-function createTestWavFile(outputPath: string): void {
-  execSync(`ffmpeg -f lavfi -i "sine=frequency=1000:duration=1" -ar 44100 -ac 2 -y "${outputPath}"`, { stdio: 'pipe' });
-}
-
-function createTestMp3File(outputPath: string): void {
-  execSync(`ffmpeg -f lavfi -i "sine=frequency=1000:duration=1" -codec:a libmp3lame -qscale:a 2 -y "${outputPath}"`, {
-    stdio: 'pipe'
-  });
-}

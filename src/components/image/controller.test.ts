@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createApp } from '~/app';
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
-import { execSync } from 'child_process';
+import { existsSync, mkdirSync, rmSync, readFileSync } from 'fs';
 import path from 'path';
 import { Worker } from 'bullmq';
 import { createTestWorker } from '~/test-utils/worker';
+import { createTestPngFile } from '~/test-utils/fixtures';
+import { getImageDimensions } from '~/test-utils/probes';
 
 const TEST_DIR = path.join(process.cwd(), 'test-outputs', 'image-controller');
 const FIXTURES_DIR = path.join(process.cwd(), 'test-fixtures', 'image-controller');
@@ -103,7 +104,7 @@ describe('Image Controller', () => {
       expect(res.headers.get('content-disposition')).toContain('resize-test.png');
 
       const arrayBuffer = await res.arrayBuffer();
-      const dimensions = getImageDimensions(arrayBuffer);
+      const dimensions = getImageDimensions(arrayBuffer, TEST_DIR);
       expect(dimensions.width).toBe(320);
       expect(dimensions.height).toBe(240);
     });
@@ -126,7 +127,7 @@ describe('Image Controller', () => {
       expect(res.headers.get('content-type')).toBe('image/png');
 
       const arrayBuffer = await res.arrayBuffer();
-      const dimensions = getImageDimensions(arrayBuffer);
+      const dimensions = getImageDimensions(arrayBuffer, TEST_DIR);
       expect(dimensions.width).toBe(320);
       expect(dimensions.height).toBe(240);
     });
@@ -149,7 +150,7 @@ describe('Image Controller', () => {
       expect(res.headers.get('content-type')).toBe('image/png');
 
       const arrayBuffer = await res.arrayBuffer();
-      const dimensions = getImageDimensions(arrayBuffer);
+      const dimensions = getImageDimensions(arrayBuffer, TEST_DIR);
       expect(dimensions.width).toBe(200);
       expect(dimensions.height).toBe(200);
     });
@@ -172,7 +173,7 @@ describe('Image Controller', () => {
       expect(res.headers.get('content-type')).toBe('image/png');
 
       const arrayBuffer = await res.arrayBuffer();
-      const dimensions = getImageDimensions(arrayBuffer);
+      const dimensions = getImageDimensions(arrayBuffer, TEST_DIR);
       expect(dimensions.width).toBe(200);
       expect(dimensions.height).toBe(200);
     });
@@ -242,29 +243,3 @@ describe('Image Controller', () => {
     });
   });
 });
-
-function createTestPngFile(outputPath: string, width = 320, height = 240): void {
-  execSync(`ffmpeg -f lavfi -i color=c=blue:s=${width}x${height}:d=1 -frames:v 1 -y "${outputPath}"`, {
-    stdio: 'pipe'
-  });
-}
-
-function getImageDimensions(buffer: ArrayBuffer): { width: number; height: number } {
-  const tempPath = path.join(TEST_DIR, `temp-${Date.now()}.png`);
-  if (!existsSync(TEST_DIR)) {
-    mkdirSync(TEST_DIR, { recursive: true });
-  }
-  writeFileSync(tempPath, Buffer.from(buffer));
-  try {
-    const output = execSync(
-      `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of json "${tempPath}"`
-    ).toString();
-    const data = JSON.parse(output);
-    return {
-      width: data.streams[0].width,
-      height: data.streams[0].height
-    };
-  } finally {
-    rmSync(tempPath, { force: true });
-  }
-}
