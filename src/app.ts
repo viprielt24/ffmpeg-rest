@@ -9,6 +9,7 @@ import { registerAudioRoutes } from '~/components/audio/controller';
 import { registerVideoRoutes } from '~/components/video/controller';
 import { registerImageRoutes } from '~/components/image/controller';
 import { registerMediaRoutes } from '~/components/media/controller';
+import { registerMuxRoutes } from '~/components/mux/controller';
 
 export function createApp() {
   const app = new OpenAPIHono();
@@ -25,6 +26,7 @@ export function createApp() {
   registerVideoRoutes(app);
   registerImageRoutes(app);
   registerMediaRoutes(app);
+  registerMuxRoutes(app);
 
   app.doc('/doc', {
     openapi: '3.0.0',

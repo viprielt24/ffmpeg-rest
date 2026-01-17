@@ -11,7 +11,9 @@ export const JobType = {
   VIDEO_EXTRACT_FRAMES: 'video:frames',
   IMAGE_TO_JPG: 'image:jpg',
   IMAGE_RESIZE: 'image:resize',
-  MEDIA_PROBE: 'media:info'
+  MEDIA_PROBE: 'media:info',
+  MUX_VIDEO_AUDIO: 'mux:video-audio',
+  CONCATENATE_VIDEOS: 'concatenate:videos'
 } as const;
 
 export type JobTypeName = (typeof JobType)[keyof typeof JobType];

@@ -37,4 +37,4 @@ CLAUDE.md
 
 # test
 test-outputs/
-test-fixtures/
+test-fixtures/.env.local
