@@ -16,22 +16,6 @@ const execFileAsync = promisify(execFile);
 const PROCESSING_TIMEOUT = 600000; // 10 minutes
 const DOWNLOAD_TIMEOUT = 300000; // 5 minutes
 
-/**
- * Default values for normalize parameters
- */
-const DEFAULTS = {
-  width: 1080,
-  height: 1920,
-  fps: 30,
-  crf: 23,
-  preset: 'fast',
-  audioSampleRate: 48000,
-  audioChannels: 2
-};
-
-/**
- * Download a file from URL to local path
- */
 async function downloadFile(url: string, outputPath: string): Promise<void> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT);
@@ -47,7 +31,6 @@ async function downloadFile(url: string, outputPath: string): Promise<void> {
       throw new Error('No response body');
     }
 
-    // Use arrayBuffer approach for better TypeScript compatibility
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     await writeFile(outputPath, buffer);
@@ -56,28 +39,24 @@ async function downloadFile(url: string, outputPath: string): Promise<void> {
   }
 }
 
-/**
- * Process normalize job - scale, fps, and encode video to standard format
- */
 export async function processNormalizeVideo(job: Job<INormalizeVideoJobData>): Promise<JobResult> {
   const {
     videoUrl,
-    width = DEFAULTS.width,
-    height = DEFAULTS.height,
-    fps = DEFAULTS.fps,
+    width,
+    height,
+    fps,
     videoBitrate,
-    crf = DEFAULTS.crf,
-    preset = DEFAULTS.preset,
+    crf,
+    preset,
     audioBitrate,
-    audioSampleRate = DEFAULTS.audioSampleRate,
-    audioChannels = DEFAULTS.audioChannels,
+    audioSampleRate,
+    audioChannels,
     duration
   } = job.data;
-
   const jobId = job.id ?? randomUUID();
 
   const jobDir = join(env.TEMP_DIR, `normalize-${jobId}`);
-  const videoPath = join(jobDir, 'input-video.mp4');
+  const inputPath = join(jobDir, 'input.mp4');
   const outputPath = join(jobDir, 'output.mp4');
 
   const startTime = Date.now();
@@ -85,22 +64,23 @@ export async function processNormalizeVideo(job: Job<INormalizeVideoJobData>): P
   try {
     await mkdir(jobDir, { recursive: true });
 
-    // Download input video
+    // Download input
     logger.info({ jobId, videoUrl }, 'Downloading input video');
     await job.updateProgress(5);
+    await downloadFile(videoUrl, inputPath);
+    await job.updateProgress(20);
 
-    await downloadFile(videoUrl, videoPath);
-
-    await job.updateProgress(30);
-    logger.info({ jobId }, 'Input video downloaded, starting FFmpeg normalize');
+    logger.info({ jobId, width, height, fps, preset }, 'Starting FFmpeg normalize');
 
     // Build FFmpeg args
     const ffmpegArgs = [
       '-y',
       '-i',
-      videoPath,
+      inputPath,
+      // Video filter: scale + pad (letterbox/pillarbox) + fps
       '-vf',
       `scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,fps=${fps}`,
+      // Video codec
       '-c:v',
       'libx264',
       '-preset',
@@ -109,26 +89,28 @@ export async function processNormalizeVideo(job: Job<INormalizeVideoJobData>): P
       'yuv420p'
     ];
 
-    // Video quality: bitrate OR crf (not both)
+    // Video quality: bitrate OR crf (bitrate takes priority)
     if (videoBitrate) {
       ffmpegArgs.push('-b:v', videoBitrate);
     } else {
-      ffmpegArgs.push('-crf', String(crf));
+      ffmpegArgs.push('-crf', crf.toString());
     }
 
-    // Audio encoding
-    ffmpegArgs.push('-c:a', 'aac', '-ar', String(audioSampleRate), '-ac', String(audioChannels));
+    // Audio codec
+    ffmpegArgs.push('-c:a', 'aac', '-ar', audioSampleRate.toString(), '-ac', audioChannels.toString());
+
+    // Audio bitrate (optional)
     if (audioBitrate) {
       ffmpegArgs.push('-b:a', audioBitrate);
     }
 
-    // Sync and duration
-    ffmpegArgs.push('-shortest', '-movflags', '+faststart');
+    // Duration trim (optional)
     if (duration !== undefined) {
-      ffmpegArgs.push('-t', String(duration));
+      ffmpegArgs.push('-t', duration.toString());
     }
 
-    ffmpegArgs.push(outputPath);
+    // Output optimizations
+    ffmpegArgs.push('-movflags', '+faststart', outputPath);
 
     // Run FFmpeg
     await execFileAsync('ffmpeg', ffmpegArgs, { timeout: PROCESSING_TIMEOUT });

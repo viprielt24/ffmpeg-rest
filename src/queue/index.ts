@@ -13,7 +13,8 @@ export const JobType = {
   IMAGE_RESIZE: 'image:resize',
   MEDIA_PROBE: 'media:info',
   MUX_VIDEO_AUDIO: 'mux:video-audio',
-  CONCATENATE_VIDEOS: 'concatenate:videos'
+  CONCATENATE_VIDEOS: 'concatenate:videos',
+  NORMALIZE_VIDEO: 'normalize:video'
 } as const;
 
 export type JobTypeName = (typeof JobType)[keyof typeof JobType];
