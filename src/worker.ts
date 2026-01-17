@@ -5,6 +5,7 @@ import { logger } from '~/config/logger';
 import { QUEUE_NAME, JobType } from '~/queue';
 import type { JobResult } from '~/queue';
 import { checkS3Health } from '~/utils/storage';
+import { sendWebhook } from '~/utils/webhook';
 
 import { processAudioToMp3, processAudioToWav } from '~/queue/audio/processor';
 import { processVideoToMp4, processVideoExtractAudio, processVideoExtractFrames } from '~/queue/video/processor';
@@ -50,12 +51,35 @@ const worker = new Worker<unknown, JobResult>(
   }
 );
 
-worker.on('completed', (job) => {
+worker.on('completed', async (job, result: JobResult) => {
   logger.info({ jobId: job.id }, 'Job completed successfully');
+
+  // Send webhook if configured
+  const jobData = job.data as { webhookUrl?: string };
+  if (jobData.webhookUrl && job.id) {
+    const webhookResult =
+      result.success && result.outputUrl && result.metadata
+        ? {
+            url: result.outputUrl,
+            fileSizeBytes: (result.metadata['fileSizeBytes'] as number) ?? 0,
+            processingTimeMs: (result.metadata['processingTimeMs'] as number) ?? 0
+          }
+        : undefined;
+
+    await sendWebhook(jobData.webhookUrl, job.id, result.success ? 'completed' : 'failed', webhookResult, result.error);
+  }
 });
 
-worker.on('failed', (job, err) => {
+worker.on('failed', async (job, err) => {
   logger.error({ jobId: job?.id, error: err.message }, 'Job failed');
+
+  // Send webhook if configured (only on final failure after all retries)
+  if (job?.id && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+    const jobData = job.data as { webhookUrl?: string };
+    if (jobData.webhookUrl) {
+      await sendWebhook(jobData.webhookUrl, job.id, 'failed', undefined, err.message);
+    }
+  }
 });
 
 worker.on('error', (err) => {
