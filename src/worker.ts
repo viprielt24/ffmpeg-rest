@@ -12,6 +12,7 @@ import { processVideoToMp4, processVideoExtractAudio, processVideoExtractFrames 
 import { processImageToJpg, processImageResize } from '~/queue/image/processor';
 import { processMediaProbe } from '~/queue/media/processor';
 import { processMuxVideoAudio, processConcatenateVideos } from '~/queue/mux/processor';
+import { processNormalizeVideo } from '~/queue/normalize/processor';
 
 await checkRedisHealth();
 
@@ -41,6 +42,8 @@ const worker = new Worker<unknown, JobResult>(
         return processMuxVideoAudio(job as never);
       case JobType.CONCATENATE_VIDEOS:
         return processConcatenateVideos(job as never);
+      case JobType.NORMALIZE_VIDEO:
+        return processNormalizeVideo(job as never);
       default:
         throw new Error(`Unknown job type: ${job.name}`);
     }
