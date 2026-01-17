@@ -1,5 +1,5 @@
 import type { OpenAPIHono } from '@hono/zod-openapi';
-import { muxRoute, jobStatusRoute, type IJobStatusResponse } from './schemas';
+import { muxRoute, jobStatusRoute, concatenateRoute, type IJobStatusResponse } from './schemas';
 import { queue, JobType } from '~/queue';
 import { logger } from '~/config/logger';
 import { env } from '~/config/env';
@@ -123,6 +123,47 @@ export function registerMuxRoutes(app: OpenAPIHono) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error({ error: errorMessage }, 'Failed to get job status');
       return c.json({ error: 'Failed to get job status', message: errorMessage }, 500);
+    }
+  });
+
+  app.openapi(concatenateRoute, async (c) => {
+    try {
+      const body = c.req.valid('json');
+
+      // Validate S3 mode is enabled for URL-based processing
+      if (env.STORAGE_MODE !== 's3') {
+        return c.json(
+          {
+            error: 'S3 mode required',
+            message: 'URL-based concatenate requires STORAGE_MODE=s3 to be configured'
+          },
+          400
+        );
+      }
+
+      logger.info({ videoCount: body.videoUrls.length }, 'Queueing concatenate job');
+
+      const job = await queue.add(JobType.CONCATENATE_VIDEOS, {
+        type: 'concatenate',
+        videoUrls: body.videoUrls,
+        webhookUrl: body.webhookUrl
+      });
+
+      logger.info({ jobId: job.id }, 'Concatenate job queued');
+
+      return c.json(
+        {
+          success: true as const,
+          jobId: job.id ?? '',
+          status: 'queued' as const,
+          message: 'Job queued successfully. Poll GET /jobs/:jobId for status.'
+        },
+        202
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error({ error: errorMessage }, 'Failed to queue concatenate job');
+      return c.json({ error: 'Failed to queue job', message: errorMessage }, 500);
     }
   });
 }

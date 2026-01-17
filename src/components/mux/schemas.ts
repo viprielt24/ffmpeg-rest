@@ -192,3 +192,78 @@ export const jobStatusRoute = createRoute({
     }
   }
 });
+
+/**
+ * Concatenate request body schema - join multiple videos
+ */
+export const ConcatenateRequestSchema = z.object({
+  videoUrls: z
+    .array(z.string().url())
+    .min(2, 'At least 2 video URLs required')
+    .openapi({
+      description: 'Array of video URLs to concatenate in order',
+      example: ['https://example.com/video1.mp4', 'https://example.com/video2.mp4']
+    }),
+  webhookUrl: z.string().url().optional().openapi({
+    description: 'Optional: URL to call when processing completes',
+    example: 'https://example.com/webhook'
+  })
+});
+
+export type IConcatenateRequest = z.infer<typeof ConcatenateRequestSchema>;
+
+/**
+ * POST /concatenate - Join multiple videos sequentially
+ */
+export const concatenateRoute = createRoute({
+  method: 'post',
+  path: '/concatenate',
+  tags: ['Concatenate'],
+  summary: 'Join multiple videos sequentially',
+  description:
+    'Accepts an array of video URLs, queues a job to concatenate them in order, and returns a job ID for polling.',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: ConcatenateRequestSchema
+        }
+      },
+      required: true
+    }
+  },
+  responses: {
+    202: {
+      content: {
+        'application/json': {
+          schema: JobQueuedResponseSchema
+        }
+      },
+      description: 'Job queued successfully'
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema
+        }
+      },
+      description: 'Invalid request parameters'
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema
+        }
+      },
+      description: 'Unauthorized - missing or invalid auth token'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema
+        }
+      },
+      description: 'Internal server error'
+    }
+  }
+});
