@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "context7": {
+        "command": "npx",
+        "args": [
+            "-y",
+            "@upstash/context7-mcp",
+            "--api-key",
+            "ctx7sk-e50d391e-8b7c-41f0-b8ee-23b4b77c96b6"
+        ]
+    },
+    "Railway": {
+        "type": "stdio",
+        "command": "npx",
+        "args": [
+            "@railway/mcp-server"
+        ],
+        "env": {}
+        }
+    }
+}
