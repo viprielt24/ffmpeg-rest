@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: ffmpegapi/ltx2-runpod
+  IMAGE_NAME: viprielt24/ltx2-runpod
 
 jobs:
   build-and-push:
