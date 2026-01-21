@@ -31,6 +31,18 @@ export const LTX2RequestSchema = z.object({
     description: 'Output height (512-1080)',
     example: 576
   }),
+  numInferenceSteps: z.number().int().min(10).max(50).default(30).optional().openapi({
+    description: 'Number of diffusion steps (10-50). More steps = higher quality but slower',
+    example: 30
+  }),
+  guidanceScale: z.number().min(1).max(15).default(7.5).optional().openapi({
+    description: 'How closely to follow the prompt (1-15). Higher = more prompt adherence',
+    example: 7.5
+  }),
+  fps: z.number().int().min(12).max(30).default(24).optional().openapi({
+    description: 'Frames per second (12-30)',
+    example: 24
+  }),
   webhookUrl: z.string().url().optional().openapi({
     description: 'URL to call when processing completes'
   })

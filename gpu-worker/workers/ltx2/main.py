@@ -74,8 +74,11 @@ def main():
                 image_path=local_image,
                 prompt=job.get("prompt", ""),
                 duration=job.get("duration", 5),
+                fps=job.get("fps", 24),
                 width=job.get("width", 1024),
                 height=job.get("height", 576),
+                num_inference_steps=job.get("numInferenceSteps", 30),
+                guidance_scale=job.get("guidanceScale", 7.5),
                 progress_callback=on_progress,
             )
             queue.update_progress(job_id, 90)

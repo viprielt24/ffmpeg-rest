@@ -19,7 +19,10 @@ export const LTX2JobDataSchema = BaseJobDataSchema.extend({
   prompt: z.string().optional(),
   duration: z.number().default(5),
   width: z.number().default(1024),
-  height: z.number().default(576)
+  height: z.number().default(576),
+  numInferenceSteps: z.number().default(30),
+  guidanceScale: z.number().default(7.5),
+  fps: z.number().default(24)
 });
 
 export type ILTX2JobData = z.infer<typeof LTX2JobDataSchema>;

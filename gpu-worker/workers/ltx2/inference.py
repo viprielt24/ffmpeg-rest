@@ -47,6 +47,7 @@ class LTX2Generator:
         width: int = 1024,
         height: int = 576,
         num_inference_steps: int = 30,
+        guidance_scale: float = 7.5,
         progress_callback: Callable[[int], None] | None = None,
     ) -> str:
         """Generate video from image.
@@ -59,12 +60,13 @@ class LTX2Generator:
             width: Output width
             height: Output height
             num_inference_steps: Number of diffusion steps
+            guidance_scale: How closely to follow the prompt (1-15)
             progress_callback: Optional callback for progress updates (0-100)
 
         Returns:
             Path to generated video file
         """
-        logger.info(f"Generating video: image={image_path}, duration={duration}s")
+        logger.info(f"Generating video: image={image_path}, duration={duration}s, steps={num_inference_steps}, guidance={guidance_scale}")
 
         # Load and prepare image
         image = Image.open(image_path).convert("RGB")
@@ -88,7 +90,7 @@ class LTX2Generator:
             width=width,
             height=height,
             num_inference_steps=num_inference_steps,
-            guidance_scale=7.5,
+            guidance_scale=guidance_scale,
             callback_on_step_end=callback_fn,
         )
 

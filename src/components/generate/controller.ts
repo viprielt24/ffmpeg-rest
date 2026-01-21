@@ -52,6 +52,9 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             duration: body.duration,
             width: body.width ?? 1024,
             height: body.height ?? 576,
+            numInferenceSteps: body.numInferenceSteps ?? 30,
+            guidanceScale: body.guidanceScale ?? 7.5,
+            fps: body.fps ?? 24,
             webhookUrl: body.webhookUrl,
             createdAt: Date.now()
           };
