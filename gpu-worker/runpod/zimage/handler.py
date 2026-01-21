@@ -4,6 +4,11 @@ import os
 import time
 import uuid
 
+# Fix for torch.xpu attribute error in some diffusers versions
+import torch
+if not hasattr(torch, 'xpu'):
+    torch.xpu = type('xpu', (), {'is_available': lambda: False})()
+
 import boto3
 import runpod
 from botocore.config import Config
