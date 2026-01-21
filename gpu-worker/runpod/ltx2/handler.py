@@ -4,6 +4,47 @@ import os
 import time
 import uuid
 
+# Fix for torch.xpu attribute error in some diffusers versions
+# Diffusers checks for Intel XPU support which doesn't exist on NVIDIA GPUs
+import torch
+if not hasattr(torch, 'xpu'):
+    class MockXPU:
+        """Mock XPU module for environments without Intel XPU support."""
+        @staticmethod
+        def is_available():
+            return False
+        @staticmethod
+        def empty_cache():
+            pass
+        @staticmethod
+        def device_count():
+            return 0
+        @staticmethod
+        def manual_seed(seed):
+            pass
+        @staticmethod
+        def manual_seed_all(seed):
+            pass
+        @staticmethod
+        def synchronize():
+            pass
+        @staticmethod
+        def current_device():
+            return 0
+        @staticmethod
+        def get_device_name(device=None):
+            return "Mock XPU Device"
+        @staticmethod
+        def memory_allocated(device=None):
+            return 0
+        @staticmethod
+        def max_memory_allocated(device=None):
+            return 0
+        @staticmethod
+        def reset_peak_memory_stats(device=None):
+            pass
+    torch.xpu = MockXPU()
+
 import boto3
 import requests
 import runpod
