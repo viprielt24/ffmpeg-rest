@@ -31,7 +31,11 @@ const schema = z.object({
   AUTH_TOKEN: z.string().optional(),
 
   // Webhook secret for GPU worker callbacks
-  WEBHOOK_SECRET: z.string().optional()
+  WEBHOOK_SECRET: z.string().optional(),
+
+  // RunPod configuration
+  RUNPOD_API_KEY: z.string().optional(),
+  RUNPOD_LTX2_ENDPOINT_ID: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

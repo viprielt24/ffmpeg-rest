@@ -1,0 +1,19 @@
+# RunPod serverless
+runpod>=1.6.0
+
+# LTX-2 dependencies
+torch>=2.4.0
+diffusers>=0.30.0
+transformers>=4.40.0
+accelerate>=0.30.0
+safetensors>=0.4.0
+huggingface_hub>=0.23.0
+
+# Video export
+imageio>=2.34.0
+imageio-ffmpeg>=0.4.9
+
+# Storage
+boto3>=1.34.0
+requests>=2.31.0
+Pillow>=10.0.0
