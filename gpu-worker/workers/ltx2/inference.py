@@ -103,14 +103,18 @@ class LTX2Generator:
         """Export frames to video file.
 
         Args:
-            frames: List of frame arrays
+            frames: List of PIL Images or frame arrays
             output_path: Output video path
             fps: Frames per second
         """
         import imageio
+        import numpy as np
 
         writer = imageio.get_writer(output_path, fps=fps, codec="libx264")
         for frame in frames:
+            # Convert PIL Image to numpy array if needed
+            if hasattr(frame, 'convert'):
+                frame = np.array(frame)
             writer.append_data(frame)
         writer.close()
 
