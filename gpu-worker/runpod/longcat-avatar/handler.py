@@ -20,7 +20,45 @@ logger = logging.getLogger(__name__)
 
 # Model paths
 LONGCAT_DIR = os.environ.get("LONGCAT_DIR", "/workspace/LongCat-Video")
-CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", "/workspace/weights/LongCat-Video-Avatar")
+CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", "/runpod-volume/weights/LongCat-Video-Avatar")
+BASE_WEIGHTS_DIR = os.environ.get("BASE_WEIGHTS_DIR", "/runpod-volume/weights/LongCat-Video")
+
+# Flag to track if models are loaded
+_models_ready = False
+
+
+def ensure_models_downloaded():
+    """Download models from HuggingFace if not already present."""
+    global _models_ready
+    if _models_ready:
+        return
+
+    from huggingface_hub import snapshot_download
+
+    # Download base LongCat-Video weights
+    if not os.path.exists(BASE_WEIGHTS_DIR) or not os.listdir(BASE_WEIGHTS_DIR):
+        logger.info("Downloading LongCat-Video base weights...")
+        os.makedirs(BASE_WEIGHTS_DIR, exist_ok=True)
+        snapshot_download(
+            "meituan-longcat/LongCat-Video",
+            local_dir=BASE_WEIGHTS_DIR,
+            cache_dir=os.environ.get("HF_HOME", "/runpod-volume/cache"),
+        )
+        logger.info("Base weights downloaded.")
+
+    # Download LongCat-Video-Avatar weights
+    if not os.path.exists(CHECKPOINT_DIR) or not os.listdir(CHECKPOINT_DIR):
+        logger.info("Downloading LongCat-Video-Avatar weights...")
+        os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+        snapshot_download(
+            "meituan-longcat/LongCat-Video-Avatar",
+            local_dir=CHECKPOINT_DIR,
+            cache_dir=os.environ.get("HF_HOME", "/runpod-volume/cache"),
+        )
+        logger.info("Avatar weights downloaded.")
+
+    _models_ready = True
+    logger.info("All models ready.")
 
 
 def download_file(url: str, local_path: str) -> str:
@@ -128,6 +166,9 @@ def handler(event: dict) -> dict:
     """
     start_time = time.time()
     job_input = event.get("input", {})
+
+    # Ensure models are downloaded
+    ensure_models_downloaded()
 
     # Extract parameters
     audio_url = job_input.get("audioUrl", "")
