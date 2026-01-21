@@ -28,7 +28,10 @@ const schema = z.object({
   S3_DEDUP_ENABLED: z.coerce.boolean().default(true),
   S3_DEDUP_TTL_DAYS: z.coerce.number().default(90),
 
-  AUTH_TOKEN: z.string().optional()
+  AUTH_TOKEN: z.string().optional(),
+
+  // Webhook secret for GPU worker callbacks
+  WEBHOOK_SECRET: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

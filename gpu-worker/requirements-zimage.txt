@@ -1,0 +1,10 @@
+# Z-Image Text-to-Image requirements
+-r requirements-base.txt
+torch>=2.4.0
+# Install diffusers from source for Z-Image support
+# pip install git+https://github.com/huggingface/diffusers
+diffusers>=0.30.0
+transformers>=4.40.0
+accelerate>=0.30.0
+safetensors>=0.4.0
+huggingface_hub>=0.23.0

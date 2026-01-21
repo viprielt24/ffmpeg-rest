@@ -14,7 +14,11 @@ export const JobType = {
   MEDIA_PROBE: 'media:info',
   MUX_VIDEO_AUDIO: 'mux:video-audio',
   CONCATENATE_VIDEOS: 'concatenate:videos',
-  NORMALIZE_VIDEO: 'normalize:video'
+  NORMALIZE_VIDEO: 'normalize:video',
+  // AI Generation job types (processed by external GPU workers)
+  GENERATE_LTX2_VIDEO: 'generate:ltx2',
+  GENERATE_WAV2LIP: 'generate:wav2lip',
+  GENERATE_ZIMAGE: 'generate:zimage'
 } as const;
 
 export type JobTypeName = (typeof JobType)[keyof typeof JobType];

@@ -1,0 +1,10 @@
+# Wav2Lip Lip-Sync requirements
+-r requirements-base.txt
+torch>=2.0.1
+torchvision
+opencv-python>=4.8.0
+librosa>=0.9.0
+numpy<2.0
+scipy
+tqdm
+numba
