@@ -28,12 +28,15 @@ def get_generator():
         import torch
         from diffusers import LTXImageToVideoPipeline
 
-        model_path = os.environ.get("LTX2_MODEL_PATH", "/workspace/models/ltx-video")
+        # Use HuggingFace model ID - will download and cache automatically
+        model_path = os.environ.get("LTX2_MODEL_PATH", "Lightricks/LTX-Video")
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        logger.info(f"Loading model from {model_path}...")
         _generator = LTXImageToVideoPipeline.from_pretrained(
             model_path,
             torch_dtype=torch.bfloat16,
+            cache_dir=os.environ.get("HF_HOME", "/runpod-volume/cache"),
         )
         _generator.to(device)
 
