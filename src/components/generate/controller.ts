@@ -19,14 +19,16 @@ import { runpodClient } from '~/utils/runpod';
 const MODEL_TO_JOB_TYPE: Record<GenerateModel, string> = {
   ltx2: JobType.GENERATE_LTX2_VIDEO,
   wav2lip: JobType.GENERATE_WAV2LIP,
-  zimage: JobType.GENERATE_ZIMAGE
+  zimage: JobType.GENERATE_ZIMAGE,
+  longcat: JobType.GENERATE_LONGCAT
 };
 
 // Map job types back to model names
 const JOB_TYPE_TO_MODEL: Record<string, GenerateModel> = {
   [JobType.GENERATE_LTX2_VIDEO]: 'ltx2',
   [JobType.GENERATE_WAV2LIP]: 'wav2lip',
-  [JobType.GENERATE_ZIMAGE]: 'zimage'
+  [JobType.GENERATE_ZIMAGE]: 'zimage',
+  [JobType.GENERATE_LONGCAT]: 'longcat'
 };
 
 export function registerGenerateRoutes(app: OpenAPIHono) {
@@ -136,7 +138,62 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
           };
           break;
 
-        case 'zimage':
+        case 'zimage': {
+          // Check if RunPod is configured for Z-Image
+          if (runpodClient.isConfigured('zimage')) {
+            logger.info({ model }, 'Using RunPod for Z-Image job');
+
+            const placeholderData = {
+              type: jobType,
+              model: 'zimage',
+              prompt: body.prompt,
+              negativePrompt: body.negativePrompt,
+              width: body.width ?? 1024,
+              height: body.height ?? 1024,
+              steps: body.steps ?? 9,
+              guidanceScale: body.guidanceScale ?? 0,
+              seed: body.seed,
+              webhookUrl: body.webhookUrl,
+              createdAt: Date.now(),
+              useRunPod: true,
+              runpodJobId: '',
+              runpodEndpointType: 'zimage' as const
+            };
+
+            const job = await queue.add(jobType, placeholderData);
+            const ourJobId = job.id ?? '';
+
+            const runpodResponse = await runpodClient.submitZImageJob({
+              prompt: body.prompt ?? '',
+              negativePrompt: body.negativePrompt,
+              width: body.width ?? 1024,
+              height: body.height ?? 1024,
+              steps: body.steps ?? 9,
+              guidanceScale: body.guidanceScale ?? 0,
+              seed: body.seed,
+              jobId: ourJobId
+            });
+
+            await job.updateData({
+              ...placeholderData,
+              runpodJobId: runpodResponse.id
+            });
+
+            logger.info({ jobId: ourJobId, runpodJobId: runpodResponse.id }, 'Z-Image job submitted to RunPod');
+
+            return c.json(
+              {
+                success: true as const,
+                jobId: ourJobId,
+                model,
+                status: 'queued' as const,
+                message: 'Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status.'
+              },
+              202
+            );
+          }
+
+          // Fallback to BullMQ if RunPod not configured
           jobData = {
             type: jobType,
             model: 'zimage',
@@ -151,6 +208,79 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             createdAt: Date.now()
           };
           break;
+        }
+
+        case 'longcat': {
+          // Check if RunPod is configured for LongCat
+          if (runpodClient.isConfigured('longcat')) {
+            logger.info({ model }, 'Using RunPod for LongCat job');
+
+            const placeholderData = {
+              type: jobType,
+              model: 'longcat',
+              audioUrl: body.audioUrl,
+              imageUrl: body.imageUrl,
+              prompt: body.prompt,
+              mode: body.mode ?? 'ai2v',
+              resolution: body.resolution ?? '480P',
+              audioCfg: body.audioCfg ?? 4,
+              numSegments: body.numSegments ?? 1,
+              webhookUrl: body.webhookUrl,
+              createdAt: Date.now(),
+              useRunPod: true,
+              runpodJobId: '',
+              runpodEndpointType: 'longcat' as const
+            };
+
+            const job = await queue.add(jobType, placeholderData);
+            const ourJobId = job.id ?? '';
+
+            const runpodResponse = await runpodClient.submitLongCatJob({
+              audioUrl: body.audioUrl ?? '',
+              imageUrl: body.imageUrl,
+              prompt: body.prompt,
+              mode: body.mode ?? 'ai2v',
+              resolution: body.resolution ?? '480P',
+              audioCfg: body.audioCfg ?? 4,
+              numSegments: body.numSegments ?? 1,
+              jobId: ourJobId
+            });
+
+            await job.updateData({
+              ...placeholderData,
+              runpodJobId: runpodResponse.id
+            });
+
+            logger.info({ jobId: ourJobId, runpodJobId: runpodResponse.id }, 'LongCat job submitted to RunPod');
+
+            return c.json(
+              {
+                success: true as const,
+                jobId: ourJobId,
+                model,
+                status: 'queued' as const,
+                message: 'Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status.'
+              },
+              202
+            );
+          }
+
+          // Fallback to BullMQ if RunPod not configured
+          jobData = {
+            type: jobType,
+            model: 'longcat',
+            audioUrl: body.audioUrl,
+            imageUrl: body.imageUrl,
+            prompt: body.prompt,
+            mode: body.mode ?? 'ai2v',
+            resolution: body.resolution ?? '480P',
+            audioCfg: body.audioCfg ?? 4,
+            numSegments: body.numSegments ?? 1,
+            webhookUrl: body.webhookUrl,
+            createdAt: Date.now()
+          };
+          break;
+        }
       }
 
       const job = await queue.add(jobType, jobData);
@@ -191,14 +321,16 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         createdAt?: number;
         useRunPod?: boolean;
         runpodJobId?: string;
+        runpodEndpointType?: 'ltx2' | 'zimage' | 'longcat';
         webhookUrl?: string;
       };
 
       // If this is a RunPod job, fetch status from RunPod
-      if (jobData.useRunPod && jobData.runpodJobId && runpodClient.isConfigured()) {
-        const runpodStatus = await runpodClient.getJobStatus(jobData.runpodJobId);
+      const endpointType = jobData.runpodEndpointType ?? (jobData.model as 'ltx2' | 'zimage' | 'longcat' | undefined);
+      if (jobData.useRunPod && jobData.runpodJobId && endpointType && runpodClient.isConfigured(endpointType)) {
+        const runpodStatus = await runpodClient.getJobStatus(endpointType, jobData.runpodJobId);
         const createdAt = new Date(jobData.createdAt ?? job.timestamp).toISOString();
-        const model: GenerateModel = 'ltx2';
+        const model: GenerateModel = (jobData.model as GenerateModel) ?? endpointType;
 
         switch (runpodStatus.status) {
           case 'IN_QUEUE':
@@ -309,7 +441,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
 
       // Extract model from job data or type
       let model: GenerateModel;
-      if (jobData.model && ['ltx2', 'wav2lip', 'zimage'].includes(jobData.model)) {
+      if (jobData.model && ['ltx2', 'wav2lip', 'zimage', 'longcat'].includes(jobData.model)) {
         model = jobData.model as GenerateModel;
       } else if (jobData.type && jobData.type in JOB_TYPE_TO_MODEL) {
         model = JOB_TYPE_TO_MODEL[jobData.type];

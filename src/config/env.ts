@@ -35,7 +35,9 @@ const schema = z.object({
 
   // RunPod configuration
   RUNPOD_API_KEY: z.string().optional(),
-  RUNPOD_LTX2_ENDPOINT_ID: z.string().optional()
+  RUNPOD_LTX2_ENDPOINT_ID: z.string().optional(),
+  RUNPOD_ZIMAGE_ENDPOINT_ID: z.string().optional(),
+  RUNPOD_LONGCAT_ENDPOINT_ID: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

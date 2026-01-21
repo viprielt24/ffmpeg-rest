@@ -1,7 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 
 // ========== Model Enum ==========
-export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage']).openapi({
+export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage', 'longcat']).openapi({
   description: 'AI model to use for generation',
   example: 'ltx2'
 });
@@ -121,11 +121,50 @@ export const ZImageRequestSchema = z.object({
 
 export type IZImageRequest = z.infer<typeof ZImageRequestSchema>;
 
+// ========== LongCat Request Schema (Audio-Driven Avatar) ==========
+export const LongCatRequestSchema = z.object({
+  model: z.literal('longcat'),
+  audioUrl: z.string().url().openapi({
+    description: 'URL to the audio file (WAV format recommended)',
+    example: 'https://example.com/speech.wav'
+  }),
+  imageUrl: z.string().url().optional().openapi({
+    description: 'URL to the reference image (required for ai2v mode)',
+    example: 'https://example.com/avatar.jpg'
+  }),
+  prompt: z.string().max(500).optional().openapi({
+    description: 'Text prompt describing the character (for at2v mode)',
+    example: 'A professional businesswoman speaking naturally'
+  }),
+  mode: z.enum(['at2v', 'ai2v']).default('ai2v').optional().openapi({
+    description: 'Generation mode: at2v (audio+text) or ai2v (audio+image)',
+    example: 'ai2v'
+  }),
+  resolution: z.enum(['480P', '720P']).default('480P').optional().openapi({
+    description: 'Output resolution',
+    example: '480P'
+  }),
+  audioCfg: z.number().min(1).max(10).default(4).optional().openapi({
+    description: 'Audio guidance scale (1-10)',
+    example: 4
+  }),
+  numSegments: z.number().int().min(1).max(10).default(1).optional().openapi({
+    description: 'Number of segments for long videos (1-10)',
+    example: 1
+  }),
+  webhookUrl: z.string().url().optional().openapi({
+    description: 'URL to call when processing completes'
+  })
+});
+
+export type ILongCatRequest = z.infer<typeof LongCatRequestSchema>;
+
 // ========== Discriminated Union for Request ==========
 export const GenerateRequestSchema = z.discriminatedUnion('model', [
   LTX2RequestSchema,
   Wav2LipRequestSchema,
-  ZImageRequestSchema
+  ZImageRequestSchema,
+  LongCatRequestSchema
 ]);
 
 export type IGenerateRequest = z.infer<typeof GenerateRequestSchema>;
