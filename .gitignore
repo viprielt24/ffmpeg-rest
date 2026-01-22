@@ -39,3 +39,4 @@ CLAUDE.md
 # test
 test-outputs/
 test-fixtures/.env.local
+__pycache__/

@@ -4,19 +4,6 @@
 import { env } from '~/config/env';
 import { logger } from '~/config/logger';
 
-// LTX-2 Image-to-Video input
-interface ILtx2JobInput {
-  imageUrl: string;
-  prompt?: string;
-  duration?: number;
-  fps?: number;
-  width?: number;
-  height?: number;
-  numInferenceSteps?: number;
-  guidanceScale?: number;
-  jobId?: string;
-}
-
 // Z-Image Text-to-Image input
 interface IZImageJobInput {
   prompt: string;
@@ -26,18 +13,6 @@ interface IZImageJobInput {
   steps?: number;
   guidanceScale?: number;
   seed?: number;
-  jobId?: string;
-}
-
-// LongCat Avatar input
-interface ILongCatJobInput {
-  audioUrl: string;
-  imageUrl?: string;
-  prompt?: string;
-  mode?: 'at2v' | 'ai2v';
-  resolution?: '480P' | '720P';
-  audioCfg?: number;
-  numSegments?: number;
   jobId?: string;
 }
 
@@ -85,12 +60,10 @@ interface IRunPodStatusResponse {
   error?: string;
 }
 
-type EndpointType = 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk';
+type EndpointType = 'zimage' | 'infinitetalk';
 
 export interface IRunPodClient {
-  submitLtx2Job(input: ILtx2JobInput): Promise<IRunPodRunResponse>;
   submitZImageJob(input: IZImageJobInput): Promise<IRunPodRunResponse>;
-  submitLongCatJob(input: ILongCatJobInput): Promise<IRunPodRunResponse>;
   submitInfiniteTalkJob(input: IInfiniteTalkJobInput): Promise<IRunPodRunResponse>;
   getJobStatus(endpointType: EndpointType, jobId: string): Promise<IRunPodStatusResponse>;
   isConfigured(endpointType?: EndpointType): boolean;
@@ -98,28 +71,20 @@ export interface IRunPodClient {
 
 class RunPodClient implements IRunPodClient {
   private apiKey: string;
-  private ltx2EndpointId: string;
   private zimageEndpointId: string;
-  private longcatEndpointId: string;
   private infinitetalkEndpointId: string;
   private baseUrl = 'https://api.runpod.ai/v2';
 
   constructor() {
     this.apiKey = env.RUNPOD_API_KEY ?? '';
-    this.ltx2EndpointId = env.RUNPOD_LTX2_ENDPOINT_ID ?? '';
     this.zimageEndpointId = env.RUNPOD_ZIMAGE_ENDPOINT_ID ?? '';
-    this.longcatEndpointId = env.RUNPOD_LONGCAT_ENDPOINT_ID ?? '';
     this.infinitetalkEndpointId = env.RUNPOD_INFINITETALK_ENDPOINT_ID ?? '';
   }
 
   private getEndpointId(type: EndpointType): string {
     switch (type) {
-      case 'ltx2':
-        return this.ltx2EndpointId;
       case 'zimage':
         return this.zimageEndpointId;
-      case 'longcat':
-        return this.longcatEndpointId;
       case 'infinitetalk':
         return this.infinitetalkEndpointId;
     }
@@ -128,9 +93,7 @@ class RunPodClient implements IRunPodClient {
   isConfigured(endpointType?: EndpointType): boolean {
     if (!this.apiKey) return false;
     if (!endpointType) {
-      return Boolean(
-        this.ltx2EndpointId || this.zimageEndpointId || this.longcatEndpointId || this.infinitetalkEndpointId
-      );
+      return Boolean(this.zimageEndpointId || this.infinitetalkEndpointId);
     }
     return Boolean(this.getEndpointId(endpointType));
   }
@@ -168,16 +131,8 @@ class RunPodClient implements IRunPodClient {
     return result;
   }
 
-  async submitLtx2Job(input: ILtx2JobInput): Promise<IRunPodRunResponse> {
-    return this.submitJob('ltx2', input, input.jobId);
-  }
-
   async submitZImageJob(input: IZImageJobInput): Promise<IRunPodRunResponse> {
     return this.submitJob('zimage', input, input.jobId);
-  }
-
-  async submitLongCatJob(input: ILongCatJobInput): Promise<IRunPodRunResponse> {
-    return this.submitJob('longcat', input, input.jobId);
   }
 
   async submitInfiniteTalkJob(input: IInfiniteTalkJobInput): Promise<IRunPodRunResponse> {
