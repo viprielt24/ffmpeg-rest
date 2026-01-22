@@ -1,54 +1,12 @@
 import { createRoute, z } from '@hono/zod-openapi';
 
 // ========== Model Enum ==========
-export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk']).openapi({
+export const GenerateModelSchema = z.enum(['wav2lip', 'zimage', 'infinitetalk']).openapi({
   description: 'AI model to use for generation',
-  example: 'ltx2'
+  example: 'infinitetalk'
 });
 
 export type GenerateModel = z.infer<typeof GenerateModelSchema>;
-
-// ========== LTX-2 Request Schema (Image-to-Video) ==========
-export const LTX2RequestSchema = z.object({
-  model: z.literal('ltx2'),
-  imageUrl: z.string().url().openapi({
-    description: 'URL to the source image',
-    example: 'https://example.com/input.jpg'
-  }),
-  prompt: z.string().max(500).optional().openapi({
-    description: 'Text prompt for video generation',
-    example: 'A cinematic video of the scene coming to life'
-  }),
-  duration: z.number().int().min(3).max(10).default(5).openapi({
-    description: 'Video duration in seconds (3-10)',
-    example: 5
-  }),
-  width: z.number().int().min(512).max(1920).default(1024).optional().openapi({
-    description: 'Output width (512-1920)',
-    example: 1024
-  }),
-  height: z.number().int().min(512).max(1080).default(576).optional().openapi({
-    description: 'Output height (512-1080)',
-    example: 576
-  }),
-  numInferenceSteps: z.number().int().min(10).max(50).default(30).optional().openapi({
-    description: 'Number of diffusion steps (10-50). More steps = higher quality but slower',
-    example: 30
-  }),
-  guidanceScale: z.number().min(1).max(15).default(7.5).optional().openapi({
-    description: 'How closely to follow the prompt (1-15). Higher = more prompt adherence',
-    example: 7.5
-  }),
-  fps: z.number().int().min(12).max(30).default(24).optional().openapi({
-    description: 'Frames per second (12-30)',
-    example: 24
-  }),
-  webhookUrl: z.string().url().optional().openapi({
-    description: 'URL to call when processing completes'
-  })
-});
-
-export type ILTX2Request = z.infer<typeof LTX2RequestSchema>;
 
 // ========== Wav2Lip Request Schema (Lip-Sync) ==========
 export const Wav2LipRequestSchema = z.object({
@@ -121,44 +79,6 @@ export const ZImageRequestSchema = z.object({
 
 export type IZImageRequest = z.infer<typeof ZImageRequestSchema>;
 
-// ========== LongCat Request Schema (Audio-Driven Avatar) ==========
-export const LongCatRequestSchema = z.object({
-  model: z.literal('longcat'),
-  audioUrl: z.string().url().openapi({
-    description: 'URL to the audio file (WAV format recommended)',
-    example: 'https://example.com/speech.wav'
-  }),
-  imageUrl: z.string().url().optional().openapi({
-    description: 'URL to the reference image (required for ai2v mode)',
-    example: 'https://example.com/avatar.jpg'
-  }),
-  prompt: z.string().max(500).optional().openapi({
-    description: 'Text prompt describing the character (for at2v mode)',
-    example: 'A professional businesswoman speaking naturally'
-  }),
-  mode: z.enum(['at2v', 'ai2v']).default('ai2v').optional().openapi({
-    description: 'Generation mode: at2v (audio+text) or ai2v (audio+image)',
-    example: 'ai2v'
-  }),
-  resolution: z.enum(['480P', '720P']).default('480P').optional().openapi({
-    description: 'Output resolution',
-    example: '480P'
-  }),
-  audioCfg: z.number().min(1).max(10).default(4).optional().openapi({
-    description: 'Audio guidance scale (1-10)',
-    example: 4
-  }),
-  numSegments: z.number().int().min(1).max(10).default(1).optional().openapi({
-    description: 'Number of segments for long videos (1-10)',
-    example: 1
-  }),
-  webhookUrl: z.string().url().optional().openapi({
-    description: 'URL to call when processing completes'
-  })
-});
-
-export type ILongCatRequest = z.infer<typeof LongCatRequestSchema>;
-
 // ========== InfiniteTalk Request Schema (Audio-Driven Video) ==========
 export const InfiniteTalkRequestSchema = z.object({
   model: z.literal('infinitetalk'),
@@ -177,6 +97,10 @@ export const InfiniteTalkRequestSchema = z.object({
   resolution: z.enum(['480', '720']).default('720').optional().openapi({
     description: 'Output resolution (480 or 720)',
     example: '720'
+  }),
+  provider: z.enum(['modal', 'runpod']).default('modal').optional().openapi({
+    description: 'GPU provider to use (modal or runpod). Defaults to modal.',
+    example: 'modal'
   }),
   webhookUrl: z.string().url().optional().openapi({
     description: 'URL to call when processing completes'
@@ -210,6 +134,10 @@ export type IBulkInfiniteTalkJob = z.infer<typeof BulkInfiniteTalkJobSchema>;
 export const BulkInfiniteTalkRequestSchema = z.object({
   jobs: z.array(BulkInfiniteTalkJobSchema).min(1).max(50).openapi({
     description: 'Array of InfiniteTalk jobs to process (1-50 jobs)'
+  }),
+  provider: z.enum(['modal', 'runpod']).default('modal').optional().openapi({
+    description: 'GPU provider to use (modal or runpod). Defaults to modal.',
+    example: 'modal'
   }),
   webhookUrl: z.string().url().optional().openapi({
     description: 'URL to call when ALL jobs complete'
@@ -307,10 +235,8 @@ export type IBatchStatusResponse = z.infer<typeof BatchStatusResponseSchema>;
 
 // ========== Discriminated Union for Request ==========
 export const GenerateRequestSchema = z.discriminatedUnion('model', [
-  LTX2RequestSchema,
   Wav2LipRequestSchema,
   ZImageRequestSchema,
-  LongCatRequestSchema,
   InfiniteTalkRequestSchema
 ]);
 

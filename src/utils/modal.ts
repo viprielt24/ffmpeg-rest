@@ -13,6 +13,9 @@ interface IModalInfiniteTalkJobInput {
   video_url?: string;
   audio_url: string;
   resolution?: '480' | '720';
+  webhook_url?: string;
+  webhook_secret?: string;
+  our_job_id?: string;
 }
 
 // Modal API response for job submission

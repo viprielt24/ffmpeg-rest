@@ -243,10 +243,57 @@ class InfiniteTalk:
 
         return video_bytes
 
+    def _send_webhook(
+        self,
+        webhook_url: str,
+        webhook_secret: str,
+        our_job_id: str,
+        status: str,
+        video_base64: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Send webhook callback to backend."""
+        import requests
+        from datetime import datetime
+
+        payload = {
+            "jobId": our_job_id,
+            "status": status,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+        if status == "completed" and video_base64:
+            payload["result"] = {
+                "video": video_base64,
+                "contentType": "video/mp4",
+            }
+        elif status == "failed" and error:
+            payload["error"] = error
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-Webhook-Secret": webhook_secret,
+        }
+
+        try:
+            response = requests.post(
+                webhook_url,
+                json=payload,
+                headers=headers,
+                timeout=30,
+            )
+            print(f"Webhook sent to {webhook_url}: {response.status_code}")
+        except Exception as e:
+            print(f"Failed to send webhook: {e}")
+
     @modal.method()
     def process_job(self, job_id: str, request: dict) -> None:
         """Process a generation job in the background."""
         import base64
+
+        webhook_url = request.get("webhook_url")
+        webhook_secret = request.get("webhook_secret", "")
+        our_job_id = request.get("our_job_id", job_id)
 
         try:
             # Update status to processing
@@ -280,6 +327,16 @@ class InfiniteTalk:
                 "video": video_base64,
             }
 
+            # Send webhook callback if configured
+            if webhook_url:
+                self._send_webhook(
+                    webhook_url=webhook_url,
+                    webhook_secret=webhook_secret,
+                    our_job_id=our_job_id,
+                    status="completed",
+                    video_base64=video_base64,
+                )
+
             # Cleanup temp files
             if image_path and os.path.exists(image_path):
                 os.unlink(image_path)
@@ -289,10 +346,21 @@ class InfiniteTalk:
                 os.unlink(audio_path)
 
         except Exception as e:
+            error_msg = str(e)
             job_dict[job_id] = {
                 "status": "failed",
-                "error": str(e),
+                "error": error_msg,
             }
+
+            # Send webhook callback if configured
+            if webhook_url:
+                self._send_webhook(
+                    webhook_url=webhook_url,
+                    webhook_secret=webhook_secret,
+                    our_job_id=our_job_id,
+                    status="failed",
+                    error=error_msg,
+                )
 
     @modal.fastapi_endpoint(method="POST", docs=True)
     def generate(self, request: dict) -> dict:
@@ -301,13 +369,17 @@ class InfiniteTalk:
 
         Request body:
         {
-            "image_url": "https://...",  // Optional: reference image
-            "video_url": "https://...",  // Optional: reference video
-            "audio_url": "https://...",  // Required: audio file
-            "resolution": "720"          // Optional: "480" or "720"
+            "image_url": "https://...",      // Optional: reference image
+            "video_url": "https://...",      // Optional: reference video
+            "audio_url": "https://...",      // Required: audio file
+            "resolution": "720",             // Optional: "480" or "720"
+            "webhook_url": "https://...",    // Optional: callback URL when job completes
+            "webhook_secret": "...",         // Optional: secret for X-Webhook-Secret header
+            "our_job_id": "..."              // Optional: backend job ID for webhook callback
         }
 
-        Returns immediately with a job_id. Poll /status for results.
+        Returns immediately with a job_id. Poll /status for results,
+        or provide webhook_url for push notification on completion.
         """
         import uuid
 

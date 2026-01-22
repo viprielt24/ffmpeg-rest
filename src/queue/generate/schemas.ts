@@ -10,24 +10,6 @@ const BaseJobDataSchema = z.object({
 });
 
 /**
- * LTX-2 Job Data (Image-to-Video)
- */
-export const LTX2JobDataSchema = BaseJobDataSchema.extend({
-  type: z.literal('generate:ltx2'),
-  model: z.literal('ltx2'),
-  imageUrl: z.string().url(),
-  prompt: z.string().optional(),
-  duration: z.number().default(5),
-  width: z.number().default(1024),
-  height: z.number().default(576),
-  numInferenceSteps: z.number().default(30),
-  guidanceScale: z.number().default(7.5),
-  fps: z.number().default(24)
-});
-
-export type ILTX2JobData = z.infer<typeof LTX2JobDataSchema>;
-
-/**
  * Wav2Lip Job Data (Lip-Sync)
  */
 export const Wav2LipJobDataSchema = BaseJobDataSchema.extend({
@@ -61,23 +43,6 @@ export const ZImageJobDataSchema = BaseJobDataSchema.extend({
 export type IZImageJobData = z.infer<typeof ZImageJobDataSchema>;
 
 /**
- * LongCat Job Data (Audio-Driven Avatar)
- */
-export const LongCatJobDataSchema = BaseJobDataSchema.extend({
-  type: z.literal('generate:longcat'),
-  model: z.literal('longcat'),
-  audioUrl: z.string().url(),
-  imageUrl: z.string().url().optional(),
-  prompt: z.string().optional(),
-  mode: z.enum(['at2v', 'ai2v']).default('ai2v'),
-  resolution: z.enum(['480P', '720P']).default('480P'),
-  audioCfg: z.number().default(4),
-  numSegments: z.number().default(1)
-});
-
-export type ILongCatJobData = z.infer<typeof LongCatJobDataSchema>;
-
-/**
  * InfiniteTalk Job Data (Audio-Driven Video)
  */
 export const InfiniteTalkJobDataSchema = BaseJobDataSchema.extend({
@@ -95,10 +60,8 @@ export type IInfiniteTalkJobData = z.infer<typeof InfiniteTalkJobDataSchema>;
  * Union type for all AI generation job data
  */
 export const GenerateJobDataSchema = z.discriminatedUnion('type', [
-  LTX2JobDataSchema,
   Wav2LipJobDataSchema,
   ZImageJobDataSchema,
-  LongCatJobDataSchema,
   InfiniteTalkJobDataSchema
 ]);
 
