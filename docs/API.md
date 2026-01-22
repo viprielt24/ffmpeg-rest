@@ -52,9 +52,9 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/
     "imageUrl": "https://example.com/photo.jpg",
     "prompt": "A person smiling and waving at the camera, natural movement",
     "negativePrompt": "blurry, distorted, low quality",
-    "width": 1920,
-    "height": 1080,
-    "steps": 30,
+    "width": 1280,
+    "height": 720,
+    "steps": 25,
     "webhookUrl": "https://example.com/webhook"
   }'
 ```
@@ -64,10 +64,10 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/
 | `imageUrl` | string | Yes | - | URL to source image |
 | `prompt` | string | Yes | - | Text prompt describing desired video motion/content (max 1000 chars) |
 | `negativePrompt` | string | No | - | Elements to exclude from generation (max 500 chars) |
-| `width` | number | No | 1920 | Output video width (480-1920) |
-| `height` | number | No | 1080 | Output video height (480-1080) |
+| `width` | number | No | 1280 | Output video width (480-1920) |
+| `height` | number | No | 720 | Output video height (480-1080) |
 | `length` | number | No | 81 | Number of frames (17-161) |
-| `steps` | number | No | 30 | Denoising steps (5-50). Higher = better quality, slower |
+| `steps` | number | No | 25 | Denoising steps (5-50). Higher = better quality, slower |
 | `cfg` | number | No | 3.0 | Guidance scale (1-10). Controls prompt adherence |
 | `seed` | number | No | random | Random seed for reproducibility |
 | `contextOverlap` | number | No | 48 | Frame context overlap for smoother transitions (1-80) |
@@ -85,7 +85,7 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/
 }
 ```
 
-**Default settings:** 1080p HD (1920x1080), 16:9 aspect ratio, 30 denoising steps for best quality.
+**Default settings:** 720p HD (1280x720), 16:9 aspect ratio, 25 denoising steps for balanced quality and speed.
 
 ---
 
