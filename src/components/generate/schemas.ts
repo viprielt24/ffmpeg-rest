@@ -161,7 +161,7 @@ export type ILongCatRequest = z.infer<typeof LongCatRequestSchema>;
 
 // ========== InfiniteTalk Request Schema (Audio-Driven Video) ==========
 export const InfiniteTalkRequestSchema = z.object({
-  model: z.enum(['infinitetalk', 'wan22']),
+  model: z.literal('infinitetalk'),
   audioUrl: z.string().url().openapi({
     description: 'URL to the audio file for driving the video',
     example: 'https://example.com/speech.wav'
@@ -206,6 +206,58 @@ export const Wan22LoRAPairSchema = z.object({
 });
 
 export type IWan22LoRAPair = z.infer<typeof Wan22LoRAPairSchema>;
+
+// Wan2.2 request without model field (for dedicated endpoint)
+export const Wan2SingleRequestSchema = z.object({
+  imageUrl: z.string().url().openapi({
+    description: 'URL to the source image',
+    example: 'https://example.com/input.jpg'
+  }),
+  prompt: z.string().min(1).max(1000).openapi({
+    description: 'Text prompt describing desired video content',
+    example: 'A person walking gracefully through a garden'
+  }),
+  negativePrompt: z.string().max(500).optional().openapi({
+    description: 'Elements to exclude from generation',
+    example: 'blurry, low quality, distorted, deformed'
+  }),
+  width: z.number().int().min(480).max(1920).default(1920).optional().openapi({
+    description: 'Output video width (default: 1920 for 1080p HD)',
+    example: 1920
+  }),
+  height: z.number().int().min(480).max(1080).default(1080).optional().openapi({
+    description: 'Output video height (default: 1080 for 1080p HD)',
+    example: 1080
+  }),
+  length: z.number().int().min(17).max(161).default(81).optional().openapi({
+    description: 'Number of frames in video (17-161, default: 81)',
+    example: 81
+  }),
+  steps: z.number().int().min(5).max(50).default(30).optional().openapi({
+    description: 'Denoising steps (5-50). Higher = better quality but slower. Default: 30 for best quality',
+    example: 30
+  }),
+  cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
+    description: 'Guidance scale strength (1-10). Default: 3.0 for balanced quality',
+    example: 3.0
+  }),
+  seed: z.number().int().optional().openapi({
+    description: 'Random seed for reproducibility. Omit for random seed',
+    example: 42
+  }),
+  contextOverlap: z.number().int().min(1).max(80).default(48).optional().openapi({
+    description: 'Frame context overlap for smoother transitions (1-80)',
+    example: 48
+  }),
+  loraPairs: z.array(Wan22LoRAPairSchema).max(4).optional().openapi({
+    description: 'Optional LoRA model pairs for style customization (max 4 pairs)'
+  }),
+  webhookUrl: z.string().url().optional().openapi({
+    description: 'URL to call when processing completes'
+  })
+});
+
+export type IWan2SingleRequest = z.infer<typeof Wan2SingleRequestSchema>;
 
 export const Wan22RequestSchema = z.object({
   model: z.literal('wan22'),
@@ -806,6 +858,62 @@ export const getBatchStatusRoute = createRoute({
         }
       },
       description: 'Batch not found'
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Unauthorized'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Internal server error'
+    }
+  }
+});
+
+/**
+ * POST /api/v1/generate/wan-2 - Create Wan2.2 image-to-video job (dedicated endpoint)
+ */
+export const wan2SingleRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/generate/wan-2',
+  tags: ['Generate', 'Wan-2'],
+  summary: 'Create Wan2.2 image-to-video job',
+  description:
+    'Queue a Wan2.2 image-to-video generation job. Converts a static image into a video using AI. Default settings produce 1080p HD 16:9 videos with best quality.',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: Wan2SingleRequestSchema
+        }
+      },
+      required: true
+    }
+  },
+  responses: {
+    202: {
+      content: {
+        'application/json': {
+          schema: GenerateJobQueuedResponseSchema
+        }
+      },
+      description: 'Job queued successfully'
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Invalid request parameters'
     },
     401: {
       content: {

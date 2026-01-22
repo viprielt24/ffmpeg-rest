@@ -7,13 +7,15 @@ import {
   bulkInfiniteTalkRoute,
   bulkWan22Route,
   getBatchStatusRoute,
+  wan2SingleRoute,
   type IGenerateRequest,
   type IGenerateJobStatus,
   type IWebhookCallback,
   type GenerateModel,
   type IBulkInfiniteTalkRequest,
   type IBulkWan22Request,
-  type IBatchStatusResponse
+  type IBatchStatusResponse,
+  type IWan2SingleRequest
 } from './schemas';
 import { queue, JobType } from '~/queue';
 import { logger } from '~/config/logger';
@@ -467,6 +469,122 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error({ error: errorMessage }, 'Failed to queue generation job');
+      return c.json({ error: 'Failed to queue job', details: { message: errorMessage } }, 500);
+    }
+  });
+
+  // POST /api/v1/generate/wan-2 (dedicated Wan2.2 endpoint)
+  app.openapi(wan2SingleRoute, async (c) => {
+    try {
+      const body = c.req.valid('json') as IWan2SingleRequest;
+      const model = 'wan22' as const;
+      const jobType = JobType.GENERATE_WAN22;
+
+      logger.info({ model, jobType }, 'Queueing Wan2.2 job via dedicated endpoint');
+
+      // Check if RunPod is configured for Wan2.2
+      if (runpodClient.isConfigured('wan22')) {
+        logger.info({ model }, 'Using RunPod for Wan2.2 job');
+
+        const placeholderData = {
+          type: jobType,
+          model: 'wan22',
+          imageUrl: body.imageUrl,
+          prompt: body.prompt,
+          negativePrompt: body.negativePrompt,
+          width: body.width ?? 1920,
+          height: body.height ?? 1080,
+          length: body.length ?? 81,
+          steps: body.steps ?? 30,
+          cfg: body.cfg ?? 3.0,
+          seed: body.seed,
+          contextOverlap: body.contextOverlap ?? 48,
+          loraPairs: body.loraPairs,
+          webhookUrl: body.webhookUrl,
+          createdAt: Date.now(),
+          useRunPod: true,
+          runpodJobId: '',
+          runpodEndpointType: 'wan22' as const
+        };
+
+        const job = await queue.add(jobType, placeholderData);
+        const ourJobId = job.id ?? '';
+
+        const runpodResponse = await runpodClient.submitWan22Job({
+          imageUrl: body.imageUrl ?? '',
+          prompt: body.prompt ?? '',
+          negativePrompt: body.negativePrompt,
+          width: body.width ?? 1920,
+          height: body.height ?? 1080,
+          length: body.length ?? 81,
+          steps: body.steps ?? 30,
+          cfg: body.cfg ?? 3.0,
+          seed: body.seed,
+          contextOverlap: body.contextOverlap ?? 48,
+          loraPairs: body.loraPairs?.map((p) => ({
+            high: p.high,
+            low: p.low,
+            high_weight: p.highWeight,
+            low_weight: p.lowWeight
+          })),
+          jobId: ourJobId
+        });
+
+        await job.updateData({
+          ...placeholderData,
+          runpodJobId: runpodResponse.id
+        });
+
+        logger.info({ jobId: ourJobId, runpodJobId: runpodResponse.id }, 'Wan2.2 job submitted to RunPod');
+
+        return c.json(
+          {
+            success: true as const,
+            jobId: ourJobId,
+            model,
+            status: 'queued' as const,
+            message: 'Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status.'
+          },
+          202
+        );
+      }
+
+      // Fallback to BullMQ if RunPod not configured
+      const jobData = {
+        type: jobType,
+        model: 'wan22',
+        imageUrl: body.imageUrl,
+        prompt: body.prompt,
+        negativePrompt: body.negativePrompt,
+        width: body.width ?? 1920,
+        height: body.height ?? 1080,
+        length: body.length ?? 81,
+        steps: body.steps ?? 30,
+        cfg: body.cfg ?? 3.0,
+        seed: body.seed,
+        contextOverlap: body.contextOverlap ?? 48,
+        loraPairs: body.loraPairs,
+        webhookUrl: body.webhookUrl,
+        createdAt: Date.now()
+      };
+
+      const job = await queue.add(jobType, jobData);
+
+      logger.info({ jobId: job.id, model }, 'Wan2.2 job queued');
+
+      return c.json(
+        {
+          success: true as const,
+          jobId: job.id ?? '',
+          model,
+          status: 'queued' as const,
+          message: 'Job queued. Poll GET /api/v1/generate/{jobId} for status.'
+        },
+        202
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error({ error: errorMessage }, 'Failed to queue Wan2.2 job');
       return c.json({ error: 'Failed to queue job', details: { message: errorMessage } }, 500);
     }
   });
