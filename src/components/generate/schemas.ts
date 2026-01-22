@@ -185,6 +185,124 @@ export const InfiniteTalkRequestSchema = z.object({
 
 export type IInfiniteTalkRequest = z.infer<typeof InfiniteTalkRequestSchema>;
 
+// ========== Bulk InfiniteTalk Request Schema ==========
+export const BulkInfiniteTalkJobSchema = z.object({
+  audioUrl: z.string().url().openapi({
+    description: 'URL to the audio file for driving the video',
+    example: 'https://example.com/speech.wav'
+  }),
+  imageUrl: z.string().url().optional().openapi({
+    description: 'URL to reference image (use either imageUrl or videoUrl, not both)',
+    example: 'https://example.com/portrait.jpg'
+  }),
+  videoUrl: z.string().url().optional().openapi({
+    description: 'URL to reference video (use either imageUrl or videoUrl, not both)',
+    example: 'https://example.com/reference.mp4'
+  }),
+  resolution: z.enum(['480', '720']).default('720').optional().openapi({
+    description: 'Output resolution (480 or 720)',
+    example: '720'
+  })
+});
+
+export type IBulkInfiniteTalkJob = z.infer<typeof BulkInfiniteTalkJobSchema>;
+
+export const BulkInfiniteTalkRequestSchema = z.object({
+  jobs: z.array(BulkInfiniteTalkJobSchema).min(1).max(50).openapi({
+    description: 'Array of InfiniteTalk jobs to process (1-50 jobs)'
+  }),
+  webhookUrl: z.string().url().optional().openapi({
+    description: 'URL to call when ALL jobs complete'
+  })
+});
+
+export type IBulkInfiniteTalkRequest = z.infer<typeof BulkInfiniteTalkRequestSchema>;
+
+// ========== Bulk Response Schemas ==========
+export const BulkJobStatusSchema = z.object({
+  jobId: z.string(),
+  status: z.enum(['queued', 'processing', 'completed', 'failed'])
+});
+
+export const BulkGenerateResponseSchema = z.object({
+  success: z.literal(true),
+  batchId: z.string().openapi({
+    description: 'Unique batch identifier',
+    example: 'batch_abc123def456'
+  }),
+  model: z.literal('infinitetalk'),
+  totalJobs: z.number(),
+  jobs: z.array(BulkJobStatusSchema),
+  message: z.string()
+});
+
+export type IBulkGenerateResponse = z.infer<typeof BulkGenerateResponseSchema>;
+
+// ========== Batch Status Response Schemas ==========
+export const BatchJobResultSchema = z.object({
+  jobId: z.string(),
+  status: z.enum(['queued', 'processing', 'completed', 'failed']),
+  result: z
+    .object({
+      url: z.string().url(),
+      fileSizeBytes: z.number(),
+      processingTimeMs: z.number()
+    })
+    .optional(),
+  error: z.string().optional()
+});
+
+export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
+  // Pending (no jobs started)
+  z.object({
+    status: z.literal('pending'),
+    batchId: z.string(),
+    model: z.literal('infinitetalk'),
+    totalJobs: z.number(),
+    completedJobs: z.literal(0),
+    failedJobs: z.literal(0),
+    results: z.array(BatchJobResultSchema),
+    createdAt: z.string().datetime()
+  }),
+  // Processing (some jobs in progress)
+  z.object({
+    status: z.literal('processing'),
+    batchId: z.string(),
+    model: z.literal('infinitetalk'),
+    totalJobs: z.number(),
+    completedJobs: z.number(),
+    failedJobs: z.number(),
+    results: z.array(BatchJobResultSchema),
+    createdAt: z.string().datetime()
+  }),
+  // Completed (all jobs succeeded)
+  z.object({
+    status: z.literal('completed'),
+    batchId: z.string(),
+    model: z.literal('infinitetalk'),
+    totalJobs: z.number(),
+    completedJobs: z.number(),
+    failedJobs: z.literal(0),
+    results: z.array(BatchJobResultSchema),
+    createdAt: z.string().datetime(),
+    completedAt: z.string().datetime()
+  }),
+  // Partial failure (some jobs failed)
+  z.object({
+    status: z.literal('partial_failure'),
+    batchId: z.string(),
+    model: z.literal('infinitetalk'),
+    totalJobs: z.number(),
+    completedJobs: z.number(),
+    failedJobs: z.number(),
+    results: z.array(BatchJobResultSchema),
+    createdAt: z.string().datetime(),
+    completedAt: z.string().datetime()
+  })
+]);
+
+export type IBatchStatusResponse = z.infer<typeof BatchStatusResponseSchema>;
+
 // ========== Discriminated Union for Request ==========
 export const GenerateRequestSchema = z.discriminatedUnion('model', [
   LTX2RequestSchema,
@@ -396,6 +514,14 @@ export const getGenerateStatusRoute = createRoute({
         }
       },
       description: 'Unauthorized'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Internal server error'
     }
   }
 });
@@ -443,6 +569,124 @@ export const webhookCompleteRoute = createRoute({
         }
       },
       description: 'Job not found'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Internal server error'
+    }
+  }
+});
+
+/**
+ * POST /api/v1/generate/bulk/infinitetalk - Submit bulk InfiniteTalk jobs
+ */
+export const bulkInfiniteTalkRoute = createRoute({
+  method: 'post',
+  path: '/api/v1/generate/bulk/infinitetalk',
+  tags: ['Generate', 'Bulk'],
+  summary: 'Submit bulk InfiniteTalk jobs',
+  description:
+    'Queue multiple InfiniteTalk audio-driven video jobs for parallel processing. Returns a batch ID to poll for status. A single webhook is sent when ALL jobs complete.',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: BulkInfiniteTalkRequestSchema
+        }
+      },
+      required: true
+    }
+  },
+  responses: {
+    202: {
+      content: {
+        'application/json': {
+          schema: BulkGenerateResponseSchema
+        }
+      },
+      description: 'Batch queued successfully'
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Invalid request parameters'
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Unauthorized'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Internal server error'
+    }
+  }
+});
+
+/**
+ * GET /api/v1/generate/bulk/:batchId - Get batch status
+ */
+export const getBatchStatusRoute = createRoute({
+  method: 'get',
+  path: '/api/v1/generate/bulk/{batchId}',
+  tags: ['Generate', 'Bulk'],
+  summary: 'Get batch status',
+  description:
+    'Poll for status of a bulk generation batch. Returns status of all jobs and sends webhook when complete.',
+  request: {
+    params: z.object({
+      batchId: z.string().openapi({
+        description: 'Batch ID from bulk endpoint',
+        example: 'batch_abc123def456'
+      })
+    })
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: BatchStatusResponseSchema
+        }
+      },
+      description: 'Batch status retrieved'
+    },
+    404: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Batch not found'
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Unauthorized'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Internal server error'
     }
   }
 });
