@@ -61,12 +61,45 @@ export const ZImageJobDataSchema = BaseJobDataSchema.extend({
 export type IZImageJobData = z.infer<typeof ZImageJobDataSchema>;
 
 /**
+ * LongCat Job Data (Audio-Driven Avatar)
+ */
+export const LongCatJobDataSchema = BaseJobDataSchema.extend({
+  type: z.literal('generate:longcat'),
+  model: z.literal('longcat'),
+  audioUrl: z.string().url(),
+  imageUrl: z.string().url().optional(),
+  prompt: z.string().optional(),
+  mode: z.enum(['at2v', 'ai2v']).default('ai2v'),
+  resolution: z.enum(['480P', '720P']).default('480P'),
+  audioCfg: z.number().default(4),
+  numSegments: z.number().default(1)
+});
+
+export type ILongCatJobData = z.infer<typeof LongCatJobDataSchema>;
+
+/**
+ * InfiniteTalk Job Data (Audio-Driven Video)
+ */
+export const InfiniteTalkJobDataSchema = BaseJobDataSchema.extend({
+  type: z.literal('generate:infinitetalk'),
+  model: z.literal('infinitetalk'),
+  audioUrl: z.string().url(),
+  imageUrl: z.string().url().optional(),
+  videoUrl: z.string().url().optional(),
+  resolution: z.enum(['480', '720']).default('720')
+});
+
+export type IInfiniteTalkJobData = z.infer<typeof InfiniteTalkJobDataSchema>;
+
+/**
  * Union type for all AI generation job data
  */
 export const GenerateJobDataSchema = z.discriminatedUnion('type', [
   LTX2JobDataSchema,
   Wav2LipJobDataSchema,
-  ZImageJobDataSchema
+  ZImageJobDataSchema,
+  LongCatJobDataSchema,
+  InfiniteTalkJobDataSchema
 ]);
 
 export type IGenerateJobData = z.infer<typeof GenerateJobDataSchema>;

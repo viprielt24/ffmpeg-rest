@@ -14,13 +14,15 @@ import { logger } from '~/config/logger';
 import { env } from '~/config/env';
 import { sendWebhook } from '~/utils/webhook';
 import { runpodClient } from '~/utils/runpod';
+import { uploadBufferToS3 } from '~/utils/storage';
 
 // Map model names to job types
 const MODEL_TO_JOB_TYPE: Record<GenerateModel, string> = {
   ltx2: JobType.GENERATE_LTX2_VIDEO,
   wav2lip: JobType.GENERATE_WAV2LIP,
   zimage: JobType.GENERATE_ZIMAGE,
-  longcat: JobType.GENERATE_LONGCAT
+  longcat: JobType.GENERATE_LONGCAT,
+  infinitetalk: JobType.GENERATE_INFINITETALK
 };
 
 // Map job types back to model names
@@ -28,7 +30,8 @@ const JOB_TYPE_TO_MODEL: Record<string, GenerateModel> = {
   [JobType.GENERATE_LTX2_VIDEO]: 'ltx2',
   [JobType.GENERATE_WAV2LIP]: 'wav2lip',
   [JobType.GENERATE_ZIMAGE]: 'zimage',
-  [JobType.GENERATE_LONGCAT]: 'longcat'
+  [JobType.GENERATE_LONGCAT]: 'longcat',
+  [JobType.GENERATE_INFINITETALK]: 'infinitetalk'
 };
 
 export function registerGenerateRoutes(app: OpenAPIHono) {
@@ -281,6 +284,69 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
           };
           break;
         }
+
+        case 'infinitetalk': {
+          // Check if RunPod is configured for InfiniteTalk
+          if (runpodClient.isConfigured('infinitetalk')) {
+            logger.info({ model }, 'Using RunPod for InfiniteTalk job');
+
+            const placeholderData = {
+              type: jobType,
+              model: 'infinitetalk',
+              audioUrl: body.audioUrl,
+              imageUrl: body.imageUrl,
+              videoUrl: body.videoUrl,
+              resolution: body.resolution ?? '720',
+              webhookUrl: body.webhookUrl,
+              createdAt: Date.now(),
+              useRunPod: true,
+              runpodJobId: '',
+              runpodEndpointType: 'infinitetalk' as const
+            };
+
+            const job = await queue.add(jobType, placeholderData);
+            const ourJobId = job.id ?? '';
+
+            const runpodResponse = await runpodClient.submitInfiniteTalkJob({
+              audio_url: body.audioUrl ?? '',
+              image_url: body.imageUrl,
+              video_url: body.videoUrl,
+              resolution: body.resolution ?? '720',
+              jobId: ourJobId
+            });
+
+            await job.updateData({
+              ...placeholderData,
+              runpodJobId: runpodResponse.id
+            });
+
+            logger.info({ jobId: ourJobId, runpodJobId: runpodResponse.id }, 'InfiniteTalk job submitted to RunPod');
+
+            return c.json(
+              {
+                success: true as const,
+                jobId: ourJobId,
+                model,
+                status: 'queued' as const,
+                message: 'Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status.'
+              },
+              202
+            );
+          }
+
+          // Fallback to BullMQ if RunPod not configured
+          jobData = {
+            type: jobType,
+            model: 'infinitetalk',
+            audioUrl: body.audioUrl,
+            imageUrl: body.imageUrl,
+            videoUrl: body.videoUrl,
+            resolution: body.resolution ?? '720',
+            webhookUrl: body.webhookUrl,
+            createdAt: Date.now()
+          };
+          break;
+        }
       }
 
       const job = await queue.add(jobType, jobData);
@@ -321,12 +387,14 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         createdAt?: number;
         useRunPod?: boolean;
         runpodJobId?: string;
-        runpodEndpointType?: 'ltx2' | 'zimage' | 'longcat';
+        runpodEndpointType?: 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk';
         webhookUrl?: string;
+        uploadedUrl?: string; // Cached URL for InfiniteTalk base64 uploads
       };
 
       // If this is a RunPod job, fetch status from RunPod
-      const endpointType = jobData.runpodEndpointType ?? (jobData.model as 'ltx2' | 'zimage' | 'longcat' | undefined);
+      const endpointType =
+        jobData.runpodEndpointType ?? (jobData.model as 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk' | undefined);
       if (jobData.useRunPod && jobData.runpodJobId && endpointType && runpodClient.isConfigured(endpointType)) {
         const runpodStatus = await runpodClient.getJobStatus(endpointType, jobData.runpodJobId);
         const createdAt = new Date(jobData.createdAt ?? job.timestamp).toISOString();
@@ -360,26 +428,62 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
           case 'COMPLETED': {
             const output = runpodStatus.output;
             if (output) {
+              let resultUrl = output.url ?? '';
+              let contentType = output.contentType ?? 'video/mp4';
+              let fileSizeBytes = output.fileSizeBytes ?? 0;
+              const resultWidth = output.width ?? 0;
+              const resultHeight = output.height ?? 0;
+              const processingTimeMs = output.processingTimeMs ?? 0;
+
+              // InfiniteTalk returns base64 video instead of URL
+              if (endpointType === 'infinitetalk' && output.video) {
+                // Check if we already uploaded this (cached URL)
+                if (jobData.uploadedUrl) {
+                  resultUrl = jobData.uploadedUrl;
+                  logger.info({ jobId, url: resultUrl }, 'Using cached InfiniteTalk upload URL');
+                } else {
+                  // Decode base64 and upload to R2
+                  logger.info({ jobId }, 'Decoding InfiniteTalk base64 video and uploading to R2');
+                  const videoBuffer = Buffer.from(output.video, 'base64');
+                  fileSizeBytes = videoBuffer.length;
+                  contentType = 'video/mp4';
+
+                  const uploadResult = await uploadBufferToS3(videoBuffer, contentType, `infinitetalk-${jobId}.mp4`);
+                  resultUrl = uploadResult.url;
+
+                  // Cache the uploaded URL in job data
+                  const currentData = job.data as Record<string, unknown>;
+                  await job.updateData({
+                    ...currentData,
+                    uploadedUrl: resultUrl
+                  });
+
+                  logger.info({ jobId, url: resultUrl, size: fileSizeBytes }, 'InfiniteTalk video uploaded to R2');
+                }
+              }
+
               // Update job data with result
+              const currentJobData = job.data as Record<string, unknown>;
               await job.updateData({
-                ...job.data,
+                ...currentJobData,
+                uploadedUrl: resultUrl,
                 completedResult: {
-                  url: output.url,
-                  contentType: output.contentType,
-                  fileSizeBytes: output.fileSizeBytes,
+                  url: resultUrl,
+                  contentType,
+                  fileSizeBytes,
                   durationMs: output.durationMs,
-                  width: output.width,
-                  height: output.height,
-                  processingTimeMs: output.processingTimeMs
+                  width: resultWidth,
+                  height: resultHeight,
+                  processingTimeMs
                 }
               });
 
               // Send webhook if configured
               if (jobData.webhookUrl) {
                 await sendWebhook(jobData.webhookUrl, jobId, 'completed', {
-                  url: output.url,
-                  fileSizeBytes: output.fileSizeBytes,
-                  processingTimeMs: output.processingTimeMs
+                  url: resultUrl,
+                  fileSizeBytes,
+                  processingTimeMs
                 });
               }
 
@@ -389,14 +493,14 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
                   jobId,
                   model,
                   result: {
-                    url: output.url,
-                    contentType: output.contentType,
-                    fileSizeBytes: output.fileSizeBytes,
+                    url: resultUrl,
+                    contentType,
+                    fileSizeBytes,
                     durationMs: output.durationMs,
-                    width: output.width,
-                    height: output.height
+                    width: resultWidth,
+                    height: resultHeight
                   },
-                  processingTimeMs: output.processingTimeMs,
+                  processingTimeMs,
                   createdAt,
                   completedAt: new Date().toISOString()
                 },
@@ -411,8 +515,9 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             const errorMsg = runpodStatus.error ?? 'Job failed on RunPod';
 
             // Update job data with error
+            const failedJobData = job.data as Record<string, unknown>;
             await job.updateData({
-              ...job.data,
+              ...failedJobData,
               failedError: errorMsg,
               failedAt: Date.now()
             });
@@ -441,10 +546,14 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
 
       // Extract model from job data or type
       let model: GenerateModel;
-      if (jobData.model && ['ltx2', 'wav2lip', 'zimage', 'longcat'].includes(jobData.model)) {
+      if (jobData.model && ['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk'].includes(jobData.model)) {
         model = jobData.model as GenerateModel;
       } else if (jobData.type && jobData.type in JOB_TYPE_TO_MODEL) {
-        model = JOB_TYPE_TO_MODEL[jobData.type];
+        const mappedModel = JOB_TYPE_TO_MODEL[jobData.type];
+        if (!mappedModel) {
+          return c.json({ error: 'Job not found or invalid job type' }, 404);
+        }
+        model = mappedModel;
       } else {
         return c.json({ error: 'Job not found or invalid job type' }, 404);
       }

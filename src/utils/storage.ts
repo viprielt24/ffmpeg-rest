@@ -170,3 +170,46 @@ export async function uploadToS3(
 
   return result;
 }
+
+/**
+ * Upload a buffer directly to S3 (for base64-decoded content)
+ */
+export async function uploadBufferToS3(buffer: Buffer, contentType: string, filename: string): Promise<UploadResult> {
+  if (env.STORAGE_MODE !== 's3') {
+    throw new Error('S3 mode not enabled');
+  }
+
+  if (!env.S3_ENDPOINT || !env.S3_REGION || !env.S3_BUCKET || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY) {
+    throw new Error('S3 configuration missing');
+  }
+
+  const s3Client = new S3Client({
+    endpoint: env.S3_ENDPOINT,
+    region: env.S3_REGION,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: env.S3_ACCESS_KEY_ID,
+      secretAccessKey: env.S3_SECRET_ACCESS_KEY
+    }
+  });
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  const uuid = randomUUID();
+  const key = `${env.S3_PATH_PREFIX}/${timestamp}-${uuid}/${filename}`;
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: env.S3_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: contentType,
+      ACL: 'public-read'
+    })
+  );
+
+  const url = env.S3_PUBLIC_URL ? `${env.S3_PUBLIC_URL}/${key}` : `${env.S3_ENDPOINT}/${env.S3_BUCKET}/${key}`;
+
+  logger.info({ url, key, size: buffer.length }, 'Buffer uploaded to S3');
+
+  return { url, key };
+}

@@ -1,7 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 
 // ========== Model Enum ==========
-export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage', 'longcat']).openapi({
+export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk']).openapi({
   description: 'AI model to use for generation',
   example: 'ltx2'
 });
@@ -159,12 +159,39 @@ export const LongCatRequestSchema = z.object({
 
 export type ILongCatRequest = z.infer<typeof LongCatRequestSchema>;
 
+// ========== InfiniteTalk Request Schema (Audio-Driven Video) ==========
+export const InfiniteTalkRequestSchema = z.object({
+  model: z.literal('infinitetalk'),
+  audioUrl: z.string().url().openapi({
+    description: 'URL to the audio file for driving the video',
+    example: 'https://example.com/speech.wav'
+  }),
+  imageUrl: z.string().url().optional().openapi({
+    description: 'URL to reference image (use either imageUrl or videoUrl, not both)',
+    example: 'https://example.com/portrait.jpg'
+  }),
+  videoUrl: z.string().url().optional().openapi({
+    description: 'URL to reference video (use either imageUrl or videoUrl, not both)',
+    example: 'https://example.com/reference.mp4'
+  }),
+  resolution: z.enum(['480', '720']).default('720').optional().openapi({
+    description: 'Output resolution (480 or 720)',
+    example: '720'
+  }),
+  webhookUrl: z.string().url().optional().openapi({
+    description: 'URL to call when processing completes'
+  })
+});
+
+export type IInfiniteTalkRequest = z.infer<typeof InfiniteTalkRequestSchema>;
+
 // ========== Discriminated Union for Request ==========
 export const GenerateRequestSchema = z.discriminatedUnion('model', [
   LTX2RequestSchema,
   Wav2LipRequestSchema,
   ZImageRequestSchema,
-  LongCatRequestSchema
+  LongCatRequestSchema,
+  InfiniteTalkRequestSchema
 ]);
 
 export type IGenerateRequest = z.infer<typeof GenerateRequestSchema>;

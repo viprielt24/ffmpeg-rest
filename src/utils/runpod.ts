@@ -41,6 +41,28 @@ interface ILongCatJobInput {
   jobId?: string;
 }
 
+// InfiniteTalk Audio-Driven Video input (internal interface)
+interface IInfiniteTalkJobInput {
+  image_url?: string;
+  video_url?: string;
+  audio_url: string;
+  resolution?: '480' | '720';
+  jobId?: string;
+}
+
+// InfiniteTalk RunPod API format (what the endpoint expects)
+// Based on https://github.com/wlsdml1114/Infinitetalk_Runpod_hub
+interface IInfiniteTalkRunPodInput {
+  input_type: 'image' | 'video';
+  person_count: 'single' | 'multi';
+  wav_url: string;
+  image_url?: string;
+  video_url?: string;
+  width?: number;
+  height?: number;
+  prompt?: string;
+}
+
 interface IRunPodRunResponse {
   id: string;
   status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
@@ -49,24 +71,27 @@ interface IRunPodRunResponse {
 interface IRunPodStatusResponse {
   id: string;
   status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  executionTime?: number;
   output?: {
-    url: string;
-    contentType: string;
-    fileSizeBytes: number;
+    url?: string;
+    video?: string; // Base64 encoded video (used by InfiniteTalk)
+    contentType?: string;
+    fileSizeBytes?: number;
     durationMs?: number;
-    width: number;
-    height: number;
-    processingTimeMs: number;
+    width?: number;
+    height?: number;
+    processingTimeMs?: number;
   };
   error?: string;
 }
 
-type EndpointType = 'ltx2' | 'zimage' | 'longcat';
+type EndpointType = 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk';
 
 export interface IRunPodClient {
   submitLtx2Job(input: ILtx2JobInput): Promise<IRunPodRunResponse>;
   submitZImageJob(input: IZImageJobInput): Promise<IRunPodRunResponse>;
   submitLongCatJob(input: ILongCatJobInput): Promise<IRunPodRunResponse>;
+  submitInfiniteTalkJob(input: IInfiniteTalkJobInput): Promise<IRunPodRunResponse>;
   getJobStatus(endpointType: EndpointType, jobId: string): Promise<IRunPodStatusResponse>;
   isConfigured(endpointType?: EndpointType): boolean;
 }
@@ -76,6 +101,7 @@ class RunPodClient implements IRunPodClient {
   private ltx2EndpointId: string;
   private zimageEndpointId: string;
   private longcatEndpointId: string;
+  private infinitetalkEndpointId: string;
   private baseUrl = 'https://api.runpod.ai/v2';
 
   constructor() {
@@ -83,6 +109,7 @@ class RunPodClient implements IRunPodClient {
     this.ltx2EndpointId = env.RUNPOD_LTX2_ENDPOINT_ID ?? '';
     this.zimageEndpointId = env.RUNPOD_ZIMAGE_ENDPOINT_ID ?? '';
     this.longcatEndpointId = env.RUNPOD_LONGCAT_ENDPOINT_ID ?? '';
+    this.infinitetalkEndpointId = env.RUNPOD_INFINITETALK_ENDPOINT_ID ?? '';
   }
 
   private getEndpointId(type: EndpointType): string {
@@ -93,13 +120,17 @@ class RunPodClient implements IRunPodClient {
         return this.zimageEndpointId;
       case 'longcat':
         return this.longcatEndpointId;
+      case 'infinitetalk':
+        return this.infinitetalkEndpointId;
     }
   }
 
   isConfigured(endpointType?: EndpointType): boolean {
     if (!this.apiKey) return false;
     if (!endpointType) {
-      return Boolean(this.ltx2EndpointId || this.zimageEndpointId || this.longcatEndpointId);
+      return Boolean(
+        this.ltx2EndpointId || this.zimageEndpointId || this.longcatEndpointId || this.infinitetalkEndpointId
+      );
     }
     return Boolean(this.getEndpointId(endpointType));
   }
@@ -147,6 +178,35 @@ class RunPodClient implements IRunPodClient {
 
   async submitLongCatJob(input: ILongCatJobInput): Promise<IRunPodRunResponse> {
     return this.submitJob('longcat', input, input.jobId);
+  }
+
+  async submitInfiniteTalkJob(input: IInfiniteTalkJobInput): Promise<IRunPodRunResponse> {
+    // Transform to RunPod API format based on Infinitetalk_Runpod_hub
+    // Parameters: wav_url, image_url/video_url, input_type, person_count
+    const runpodInput: IInfiniteTalkRunPodInput = {
+      wav_url: input.audio_url,
+      input_type: input.video_url ? 'video' : 'image',
+      person_count: 'single'
+    };
+
+    // Set dimensions based on resolution
+    if (input.resolution === '720') {
+      runpodInput.width = 1280;
+      runpodInput.height = 720;
+    } else {
+      runpodInput.width = 854;
+      runpodInput.height = 480;
+    }
+
+    if (input.image_url) {
+      runpodInput.image_url = input.image_url;
+    }
+    if (input.video_url) {
+      runpodInput.video_url = input.video_url;
+    }
+
+    logger.info({ input: runpodInput }, 'Submitting InfiniteTalk job with transformed parameters');
+    return this.submitJob('infinitetalk', runpodInput, input.jobId);
   }
 
   async getJobStatus(endpointType: EndpointType, jobId: string): Promise<IRunPodStatusResponse> {
