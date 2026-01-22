@@ -1,7 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 
 // ========== Model Enum ==========
-export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk']).openapi({
+export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk', 'wan22']).openapi({
   description: 'AI model to use for generation',
   example: 'ltx2'
 });
@@ -161,7 +161,7 @@ export type ILongCatRequest = z.infer<typeof LongCatRequestSchema>;
 
 // ========== InfiniteTalk Request Schema (Audio-Driven Video) ==========
 export const InfiniteTalkRequestSchema = z.object({
-  model: z.literal('infinitetalk'),
+  model: z.enum(['infinitetalk', 'wan22']),
   audioUrl: z.string().url().openapi({
     description: 'URL to the audio file for driving the video',
     example: 'https://example.com/speech.wav'
@@ -184,6 +184,80 @@ export const InfiniteTalkRequestSchema = z.object({
 });
 
 export type IInfiniteTalkRequest = z.infer<typeof InfiniteTalkRequestSchema>;
+
+// ========== Wan2.2 Request Schema (Image-to-Video with LoRA) ==========
+export const Wan22LoRAPairSchema = z.object({
+  high: z.string().openapi({
+    description: 'High-detail LoRA model filename',
+    example: 'lora1_high.safetensors'
+  }),
+  low: z.string().openapi({
+    description: 'Low-detail LoRA model filename',
+    example: 'lora1_low.safetensors'
+  }),
+  highWeight: z.number().min(0).max(2).default(1.0).optional().openapi({
+    description: 'Weight for high-detail LoRA (0-2)',
+    example: 1.0
+  }),
+  lowWeight: z.number().min(0).max(2).default(1.0).optional().openapi({
+    description: 'Weight for low-detail LoRA (0-2)',
+    example: 1.0
+  })
+});
+
+export type IWan22LoRAPair = z.infer<typeof Wan22LoRAPairSchema>;
+
+export const Wan22RequestSchema = z.object({
+  model: z.literal('wan22'),
+  imageUrl: z.string().url().openapi({
+    description: 'URL to the source image',
+    example: 'https://example.com/input.jpg'
+  }),
+  prompt: z.string().min(1).max(1000).openapi({
+    description: 'Text prompt describing desired video content',
+    example: 'A person walking gracefully through a garden'
+  }),
+  negativePrompt: z.string().max(500).optional().openapi({
+    description: 'Elements to exclude from generation',
+    example: 'blurry, low quality, distorted, deformed'
+  }),
+  width: z.number().int().min(480).max(1920).default(1920).optional().openapi({
+    description: 'Output video width (default: 1920 for 1080p HD)',
+    example: 1920
+  }),
+  height: z.number().int().min(480).max(1080).default(1080).optional().openapi({
+    description: 'Output video height (default: 1080 for 1080p HD)',
+    example: 1080
+  }),
+  length: z.number().int().min(17).max(161).default(81).optional().openapi({
+    description: 'Number of frames in video (17-161, default: 81)',
+    example: 81
+  }),
+  steps: z.number().int().min(5).max(50).default(30).optional().openapi({
+    description: 'Denoising steps (5-50). Higher = better quality but slower. Default: 30 for best quality',
+    example: 30
+  }),
+  cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
+    description: 'Guidance scale strength (1-10). Default: 3.0 for balanced quality',
+    example: 3.0
+  }),
+  seed: z.number().int().optional().openapi({
+    description: 'Random seed for reproducibility. Omit for random seed',
+    example: 42
+  }),
+  contextOverlap: z.number().int().min(1).max(80).default(48).optional().openapi({
+    description: 'Frame context overlap for smoother transitions (1-80)',
+    example: 48
+  }),
+  loraPairs: z.array(Wan22LoRAPairSchema).max(4).optional().openapi({
+    description: 'Optional LoRA model pairs for style customization (max 4 pairs)'
+  }),
+  webhookUrl: z.string().url().optional().openapi({
+    description: 'URL to call when processing completes'
+  })
+});
+
+export type IWan22Request = z.infer<typeof Wan22RequestSchema>;
 
 // ========== Bulk InfiniteTalk Request Schema ==========
 export const BulkInfiniteTalkJobSchema = z.object({
@@ -218,6 +292,64 @@ export const BulkInfiniteTalkRequestSchema = z.object({
 
 export type IBulkInfiniteTalkRequest = z.infer<typeof BulkInfiniteTalkRequestSchema>;
 
+// ========== Bulk Wan2.2 Request Schema ==========
+export const BulkWan22JobSchema = z.object({
+  imageUrl: z.string().url().openapi({
+    description: 'URL to the source image',
+    example: 'https://example.com/input.jpg'
+  }),
+  prompt: z.string().min(1).max(1000).openapi({
+    description: 'Text prompt describing desired video content',
+    example: 'A person walking gracefully through a garden'
+  }),
+  negativePrompt: z.string().max(500).optional().openapi({
+    description: 'Elements to exclude from generation',
+    example: 'blurry, low quality, distorted, deformed'
+  }),
+  width: z.number().int().min(480).max(1920).default(1920).optional().openapi({
+    description: 'Output video width (default: 1920 for 1080p HD)',
+    example: 1920
+  }),
+  height: z.number().int().min(480).max(1080).default(1080).optional().openapi({
+    description: 'Output video height (default: 1080 for 1080p HD)',
+    example: 1080
+  }),
+  length: z.number().int().min(17).max(161).default(81).optional().openapi({
+    description: 'Number of frames in video (17-161, default: 81)',
+    example: 81
+  }),
+  steps: z.number().int().min(5).max(50).default(30).optional().openapi({
+    description: 'Denoising steps (5-50). Higher = better quality but slower',
+    example: 30
+  }),
+  cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
+    description: 'Guidance scale strength (1-10)',
+    example: 3.0
+  }),
+  seed: z.number().int().optional().openapi({
+    description: 'Random seed for reproducibility'
+  }),
+  contextOverlap: z.number().int().min(1).max(80).default(48).optional().openapi({
+    description: 'Frame context overlap for smoother transitions'
+  }),
+  loraPairs: z.array(Wan22LoRAPairSchema).max(4).optional().openapi({
+    description: 'Optional LoRA model pairs for style customization (max 4 pairs)'
+  })
+});
+
+export type IBulkWan22Job = z.infer<typeof BulkWan22JobSchema>;
+
+export const BulkWan22RequestSchema = z.object({
+  jobs: z.array(BulkWan22JobSchema).min(1).max(50).openapi({
+    description: 'Array of Wan2.2 jobs to process (1-50 jobs)'
+  }),
+  webhookUrl: z.string().url().optional().openapi({
+    description: 'URL to call when ALL jobs complete'
+  })
+});
+
+export type IBulkWan22Request = z.infer<typeof BulkWan22RequestSchema>;
+
 // ========== Bulk Response Schemas ==========
 export const BulkJobStatusSchema = z.object({
   jobId: z.string(),
@@ -230,7 +362,9 @@ export const BulkGenerateResponseSchema = z.object({
     description: 'Unique batch identifier',
     example: 'batch_abc123def456'
   }),
-  model: z.literal('infinitetalk'),
+  model: z.enum(['infinitetalk', 'wan22']).openapi({
+    description: 'Model used for this batch'
+  }),
   totalJobs: z.number(),
   jobs: z.array(BulkJobStatusSchema),
   message: z.string()
@@ -257,7 +391,7 @@ export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('pending'),
     batchId: z.string(),
-    model: z.literal('infinitetalk'),
+    model: z.enum(['infinitetalk', 'wan22']),
     totalJobs: z.number(),
     completedJobs: z.literal(0),
     failedJobs: z.literal(0),
@@ -268,7 +402,7 @@ export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('processing'),
     batchId: z.string(),
-    model: z.literal('infinitetalk'),
+    model: z.enum(['infinitetalk', 'wan22']),
     totalJobs: z.number(),
     completedJobs: z.number(),
     failedJobs: z.number(),
@@ -279,7 +413,7 @@ export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('completed'),
     batchId: z.string(),
-    model: z.literal('infinitetalk'),
+    model: z.enum(['infinitetalk', 'wan22']),
     totalJobs: z.number(),
     completedJobs: z.number(),
     failedJobs: z.literal(0),
@@ -291,7 +425,7 @@ export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('partial_failure'),
     batchId: z.string(),
-    model: z.literal('infinitetalk'),
+    model: z.enum(['infinitetalk', 'wan22']),
     totalJobs: z.number(),
     completedJobs: z.number(),
     failedJobs: z.number(),
@@ -309,7 +443,8 @@ export const GenerateRequestSchema = z.discriminatedUnion('model', [
   Wav2LipRequestSchema,
   ZImageRequestSchema,
   LongCatRequestSchema,
-  InfiniteTalkRequestSchema
+  InfiniteTalkRequestSchema,
+  Wan22RequestSchema
 ]);
 
 export type IGenerateRequest = z.infer<typeof GenerateRequestSchema>;
@@ -671,6 +806,62 @@ export const getBatchStatusRoute = createRoute({
         }
       },
       description: 'Batch not found'
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Unauthorized'
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Internal server error'
+    }
+  }
+});
+
+/**
+ * POST /api/v1/generate/bulk/wan22 - Submit bulk Wan2.2 jobs
+ */
+export const bulkWan22Route = createRoute({
+  method: 'post',
+  path: '/api/v1/generate/bulk/wan22',
+  tags: ['Generate', 'Bulk'],
+  summary: 'Submit bulk Wan2.2 image-to-video jobs',
+  description:
+    'Queue multiple Wan2.2 image-to-video jobs for parallel processing. Default settings produce 1080p HD 16:9 videos with best quality. Returns a batch ID to poll for status.',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: BulkWan22RequestSchema
+        }
+      },
+      required: true
+    }
+  },
+  responses: {
+    202: {
+      content: {
+        'application/json': {
+          schema: BulkGenerateResponseSchema
+        }
+      },
+      description: 'Batch queued successfully'
+    },
+    400: {
+      content: {
+        'application/json': {
+          schema: GenerateErrorSchema
+        }
+      },
+      description: 'Invalid request parameters'
     },
     401: {
       content: {

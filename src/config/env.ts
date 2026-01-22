@@ -38,7 +38,8 @@ const schema = z.object({
   RUNPOD_LTX2_ENDPOINT_ID: z.string().optional(),
   RUNPOD_ZIMAGE_ENDPOINT_ID: z.string().optional(),
   RUNPOD_LONGCAT_ENDPOINT_ID: z.string().optional(),
-  RUNPOD_INFINITETALK_ENDPOINT_ID: z.string().optional()
+  RUNPOD_INFINITETALK_ENDPOINT_ID: z.string().optional(),
+  RUNPOD_WAN22_ENDPOINT_ID: z.string().optional()
 });
 
 export const env = schema.parse(process.env);
