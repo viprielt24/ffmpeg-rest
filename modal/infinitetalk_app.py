@@ -6,23 +6,17 @@ It accepts an image/video URL and audio URL, then generates a video of the
 person speaking/moving synchronized to the audio.
 
 Deployment:
-    modal deploy modal/infinitetalk_app.py
+    python3 -m modal deploy modal/infinitetalk_app.py
 
 Development (live reload):
-    modal serve modal/infinitetalk_app.py
+    python3 -m modal serve modal/infinitetalk_app.py
 """
 
 import os
-import uuid
-import base64
-import tempfile
-import time
 from pathlib import Path
 from typing import Optional
 
 import modal
-from fastapi import HTTPException
-from pydantic import BaseModel, Field
 
 # ============= Configuration =============
 
@@ -31,7 +25,7 @@ MODEL_DIR = "/models"
 VOLUME_NAME = "infinitetalk-weights"
 
 # GPU options - A100-80GB recommended for 14B model
-GPU_CONFIG = modal.gpu.A100(size="80GB")
+GPU_CONFIG = "A100-80GB"
 
 # Container image with all dependencies
 image = (
@@ -45,6 +39,13 @@ image = (
         "libsndfile1",
         "libgl1-mesa-glx",
         "libglib2.0-0"
+    )
+    .pip_install(
+        # Build tools needed for flash-attn
+        "wheel",
+        "setuptools",
+        "packaging",
+        "ninja",
     )
     .pip_install(
         # PyTorch with CUDA 12.1
@@ -71,11 +72,6 @@ image = (
         "einops>=0.7.0",
         "omegaconf>=2.3.0",
     )
-    # Install flash-attn from pip (requires specific build)
-    .pip_install(
-        "flash_attn",
-        extra_options="--no-build-isolation",
-    )
 )
 
 # Lighter image for downloading weights
@@ -83,43 +79,6 @@ download_image = modal.Image.debian_slim(python_version="3.10").pip_install(
     "huggingface-hub>=0.25.0",
     "requests>=2.32.0",
 )
-
-# ============= Data Models =============
-
-
-class GenerateRequest(BaseModel):
-    """Request schema for video generation."""
-    image_url: Optional[str] = Field(
-        None,
-        description="URL to reference image (use either image_url or video_url)"
-    )
-    video_url: Optional[str] = Field(
-        None,
-        description="URL to reference video (use either image_url or video_url)"
-    )
-    audio_url: str = Field(
-        ...,
-        description="URL to audio file for driving the video"
-    )
-    resolution: str = Field(
-        "720",
-        description="Output resolution: '480' or '720'"
-    )
-
-
-class GenerateResponse(BaseModel):
-    """Response schema for job submission."""
-    job_id: str
-    status: str = "queued"
-
-
-class StatusResponse(BaseModel):
-    """Response schema for job status check."""
-    job_id: str
-    status: str  # queued, processing, completed, failed
-    video: Optional[str] = None  # Base64 encoded video when completed
-    error: Optional[str] = None
-
 
 # ============= Modal App =============
 
@@ -136,14 +95,13 @@ job_dict = modal.Dict.from_name("infinitetalk-jobs", create_if_missing=True)
     image=download_image,
     volumes={MODEL_DIR: model_volume},
     timeout=3600,  # 1 hour for large downloads
-    secrets=[modal.Secret.from_name("huggingface", required=False)],
 )
 def download_weights():
     """
     Download InfiniteTalk model weights to the persistent volume.
     Run this once before first inference.
 
-    Usage: modal run modal/infinitetalk_app.py::download_weights
+    Usage: python3 -m modal run modal/infinitetalk_app.py::download_weights
     """
     from huggingface_hub import snapshot_download
 
@@ -186,20 +144,15 @@ def download_weights():
     gpu=GPU_CONFIG,
     volumes={MODEL_DIR: model_volume},
     timeout=900,  # 15 min max per request
-    container_idle_timeout=300,  # Keep warm for 5 min
-    secrets=[
-        modal.Secret.from_name("infinitetalk-auth"),
-        modal.Secret.from_name("huggingface", required=False),
-    ],
+    scaledown_window=300,  # Keep warm for 5 min
 )
 class InfiniteTalk:
     """InfiniteTalk inference class with GPU acceleration."""
 
-    pipeline = None
-
     @modal.enter()
     def load_model(self):
         """Load model on container startup (runs once per cold start)."""
+        import time
         import torch
 
         print("Loading InfiniteTalk model...")
@@ -208,39 +161,16 @@ class InfiniteTalk:
         # Check if weights exist
         model_path = Path(MODEL_DIR) / "infinitetalk"
         if not model_path.exists():
-            raise RuntimeError(
-                f"Model weights not found at {model_path}. "
-                "Run 'modal run modal/infinitetalk_app.py::download_weights' first."
-            )
+            print(f"Warning: Model weights not found at {model_path}.")
+            print("Run 'python3 -m modal run modal/infinitetalk_app.py::download_weights' first.")
 
-        # Import InfiniteTalk (will be installed via pip in future, for now import from downloaded)
-        # For MVP, we'll use the model directly via diffusers/transformers
-
-        # Load the model components
-        # Note: The actual InfiniteTalk loading depends on the model's implementation
-        # This is a placeholder that will be updated based on the actual model structure
-
-        print(f"Model loaded in {time.time() - start:.2f}s")
+        print(f"Model check completed in {time.time() - start:.2f}s")
         print(f"GPU: {torch.cuda.get_device_name(0)}")
         print(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
 
-    def _verify_auth(self, auth_header: Optional[str]) -> None:
-        """Verify Bearer token authentication."""
-        expected_token = os.environ.get("AUTH_TOKEN")
-
-        if not expected_token:
-            raise HTTPException(status_code=500, detail="AUTH_TOKEN not configured")
-
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing authorization header")
-
-        token = auth_header[7:]  # Remove "Bearer " prefix
-
-        if token != expected_token:
-            raise HTTPException(status_code=403, detail="Invalid API key")
-
     def _download_file(self, url: str, suffix: str) -> str:
         """Download file from URL to temp directory."""
+        import tempfile
         import requests
 
         response = requests.get(url, timeout=120)
@@ -266,7 +196,7 @@ class InfiniteTalk:
         will depend on the InfiniteTalk model's API.
         """
         import subprocess
-        import torch
+        import tempfile
 
         # Determine output dimensions
         if resolution == "720":
@@ -284,7 +214,7 @@ class InfiniteTalk:
             # Create video from input + audio
             cmd = [
                 "ffmpeg", "-y",
-                "-loop", "1" if image_path else "0",
+                "-loop", "1" if image_path and not video_path else "0",
                 "-i", input_file,
                 "-i", audio_path,
                 "-c:v", "libx264",
@@ -316,6 +246,8 @@ class InfiniteTalk:
     @modal.method()
     def process_job(self, job_id: str, request: dict) -> None:
         """Process a generation job in the background."""
+        import base64
+
         try:
             # Update status to processing
             job_dict[job_id] = {"status": "processing"}
@@ -363,64 +295,69 @@ class InfiniteTalk:
             }
 
     @modal.fastapi_endpoint(method="POST", docs=True)
-    def generate(self, request: GenerateRequest, authorization: Optional[str] = None) -> GenerateResponse:
+    def generate(self, request: dict) -> dict:
         """
         Submit a new generation job.
 
-        Returns immediately with a job_id. Poll /status/{job_id} for results.
+        Request body:
+        {
+            "image_url": "https://...",  // Optional: reference image
+            "video_url": "https://...",  // Optional: reference video
+            "audio_url": "https://...",  // Required: audio file
+            "resolution": "720"          // Optional: "480" or "720"
+        }
+
+        Returns immediately with a job_id. Poll /status for results.
         """
-        # Note: In production, uncomment auth verification
-        # self._verify_auth(authorization)
+        import uuid
 
         # Validate input
-        if not request.image_url and not request.video_url:
-            raise HTTPException(
-                status_code=400,
-                detail="Either image_url or video_url is required"
-            )
+        if not request.get("image_url") and not request.get("video_url"):
+            return {"error": "Either image_url or video_url is required"}, 400
 
-        if request.image_url and request.video_url:
-            raise HTTPException(
-                status_code=400,
-                detail="Provide only one of image_url or video_url, not both"
-            )
+        if request.get("image_url") and request.get("video_url"):
+            return {"error": "Provide only one of image_url or video_url, not both"}, 400
 
-        if request.resolution not in ("480", "720"):
-            raise HTTPException(
-                status_code=400,
-                detail="resolution must be '480' or '720'"
-            )
+        if not request.get("audio_url"):
+            return {"error": "audio_url is required"}, 400
+
+        resolution = request.get("resolution", "720")
+        if resolution not in ("480", "720"):
+            return {"error": "resolution must be '480' or '720'"}, 400
 
         # Create job
         job_id = str(uuid.uuid4())
         job_dict[job_id] = {"status": "queued"}
 
         # Spawn background processing
-        self.process_job.spawn(job_id, request.model_dump())
+        self.process_job.spawn(job_id, request)
 
-        return GenerateResponse(job_id=job_id, status="queued")
+        return {"job_id": job_id, "status": "queued"}
 
     @modal.fastapi_endpoint(method="GET", docs=True)
-    def status(self, job_id: str, authorization: Optional[str] = None) -> StatusResponse:
+    def status(self, job_id: str) -> dict:
         """
         Check status of a generation job.
 
+        Query params:
+            job_id: The job ID returned from /generate
+
         Returns video as base64 when completed.
         """
-        # Note: In production, uncomment auth verification
-        # self._verify_auth(authorization)
+        if not job_id:
+            return {"error": "job_id is required"}, 400
 
         job_data = job_dict.get(job_id)
 
         if not job_data:
-            raise HTTPException(status_code=404, detail="Job not found")
+            return {"error": "Job not found"}, 404
 
-        return StatusResponse(
-            job_id=job_id,
-            status=job_data.get("status", "unknown"),
-            video=job_data.get("video"),
-            error=job_data.get("error"),
-        )
+        return {
+            "job_id": job_id,
+            "status": job_data.get("status", "unknown"),
+            "video": job_data.get("video"),
+            "error": job_data.get("error"),
+        }
 
 
 # ============= Local Entrypoint =============
@@ -431,9 +368,9 @@ def main():
     print("InfiniteTalk Modal App")
     print("=" * 40)
     print("\nCommands:")
-    print("  modal run modal/infinitetalk_app.py::download_weights  # Download model weights")
-    print("  modal serve modal/infinitetalk_app.py                  # Development server")
-    print("  modal deploy modal/infinitetalk_app.py                 # Production deployment")
+    print("  python3 -m modal run modal/infinitetalk_app.py::download_weights  # Download model weights")
+    print("  python3 -m modal serve modal/infinitetalk_app.py                  # Development server")
+    print("  python3 -m modal deploy modal/infinitetalk_app.py                 # Production deployment")
     print("\nEndpoints (after deployment):")
     print("  POST /generate  - Submit generation job")
     print("  GET  /status    - Check job status")
