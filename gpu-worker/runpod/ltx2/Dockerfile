@@ -1,6 +1,6 @@
 # RunPod Serverless Dockerfile for LTX-2 Image-to-Video
 # Uses base image's PyTorch to avoid disk space issues
-FROM runpod/pytorch:2.2.0-py3.10-cuda12.1.1-devel-ubuntu22.04
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
