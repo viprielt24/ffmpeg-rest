@@ -1,0 +1,35 @@
+# Modal SDK
+modal>=0.64.0
+
+# These are the dependencies used in the Modal container image.
+# They're listed here for reference - actual installation happens in the image definition.
+
+# PyTorch with CUDA 12.1
+torch==2.4.1
+torchvision==0.19.1
+torchaudio==2.4.1
+
+# Attention optimizations
+xformers==0.0.28
+flash_attn
+
+# HuggingFace ecosystem
+huggingface-hub>=0.25.0
+accelerate>=0.34.0
+transformers>=4.45.0
+diffusers>=0.30.0
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.0
+
+# FastAPI for endpoints
+fastapi[standard]>=0.115.0
+
+# Utils
+requests>=2.32.0
+pillow>=10.0.0
+numpy>=1.26.0
+opencv-python-headless>=4.9.0
+einops>=0.7.0
+omegaconf>=2.3.0

@@ -18,6 +18,7 @@ import { logger } from '~/config/logger';
 import { env } from '~/config/env';
 import { sendWebhook, sendBatchWebhook } from '~/utils/webhook';
 import { runpodClient } from '~/utils/runpod';
+import { modalClient } from '~/utils/modal';
 import { uploadBufferToS3 } from '~/utils/storage';
 import { createBatch, getBatch, markBatchWebhookSent, type IBatchJobResult } from '~/utils/batch';
 
@@ -291,7 +292,53 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         }
 
         case 'infinitetalk': {
-          // Check if RunPod is configured for InfiniteTalk
+          // Check if Modal is configured for InfiniteTalk (preferred)
+          if (modalClient.isConfigured()) {
+            logger.info({ model }, 'Using Modal for InfiniteTalk job');
+
+            const placeholderData = {
+              type: jobType,
+              model: 'infinitetalk',
+              audioUrl: body.audioUrl,
+              imageUrl: body.imageUrl,
+              videoUrl: body.videoUrl,
+              resolution: body.resolution ?? '720',
+              webhookUrl: body.webhookUrl,
+              createdAt: Date.now(),
+              useModal: true,
+              modalJobId: ''
+            };
+
+            const job = await queue.add(jobType, placeholderData);
+            const ourJobId = job.id ?? '';
+
+            const modalResponse = await modalClient.submitInfiniteTalkJob({
+              audio_url: body.audioUrl ?? '',
+              image_url: body.imageUrl,
+              video_url: body.videoUrl,
+              resolution: body.resolution ?? '720'
+            });
+
+            await job.updateData({
+              ...placeholderData,
+              modalJobId: modalResponse.job_id
+            });
+
+            logger.info({ jobId: ourJobId, modalJobId: modalResponse.job_id }, 'InfiniteTalk job submitted to Modal');
+
+            return c.json(
+              {
+                success: true as const,
+                jobId: ourJobId,
+                model,
+                status: 'queued' as const,
+                message: 'Job queued on Modal. Poll GET /api/v1/generate/{jobId} for status.'
+              },
+              202
+            );
+          }
+
+          // Fallback: Check if RunPod is configured for InfiniteTalk
           if (runpodClient.isConfigured('infinitetalk')) {
             logger.info({ model }, 'Using RunPod for InfiniteTalk job');
 
@@ -339,7 +386,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             );
           }
 
-          // Fallback to BullMQ if RunPod not configured
+          // Fallback to BullMQ if neither Modal nor RunPod configured
           jobData = {
             type: jobType,
             model: 'infinitetalk',
@@ -393,9 +440,146 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         useRunPod?: boolean;
         runpodJobId?: string;
         runpodEndpointType?: 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk';
+        useModal?: boolean;
+        modalJobId?: string;
         webhookUrl?: string;
         uploadedUrl?: string; // Cached URL for base64 video uploads
       };
+
+      // If this is a Modal job, fetch status from Modal
+      if (jobData.useModal && jobData.modalJobId && modalClient.isConfigured()) {
+        const modalStatus = await modalClient.getJobStatus(jobData.modalJobId);
+        const createdAt = new Date(jobData.createdAt ?? job.timestamp).toISOString();
+        const model: GenerateModel = (jobData.model as GenerateModel) ?? 'infinitetalk';
+
+        switch (modalStatus.status) {
+          case 'queued':
+            return c.json(
+              {
+                status: 'queued' as const,
+                jobId,
+                model,
+                createdAt
+              },
+              200
+            );
+
+          case 'processing':
+            return c.json(
+              {
+                status: 'processing' as const,
+                jobId,
+                model,
+                progress: 50, // Modal doesn't provide granular progress
+                startedAt: createdAt,
+                createdAt
+              },
+              200
+            );
+
+          case 'completed': {
+            if (modalStatus.video) {
+              let resultUrl: string;
+              let fileSizeBytes: number;
+              const contentType = 'video/mp4';
+
+              // Check if we already uploaded this (cached URL)
+              if (jobData.uploadedUrl) {
+                resultUrl = jobData.uploadedUrl;
+                const cachedResult = (job.data as Record<string, unknown>)['completedResult'] as
+                  | { fileSizeBytes?: number }
+                  | undefined;
+                fileSizeBytes = cachedResult?.fileSizeBytes ?? 0;
+                logger.info({ jobId, url: resultUrl }, 'Using cached Modal upload URL');
+              } else {
+                // Decode base64 and upload to R2
+                logger.info({ jobId }, 'Decoding Modal base64 video and uploading to R2');
+                const videoBuffer = Buffer.from(modalStatus.video, 'base64');
+                fileSizeBytes = videoBuffer.length;
+
+                const uploadResult = await uploadBufferToS3(
+                  videoBuffer,
+                  contentType,
+                  `infinitetalk-modal-${jobId}.mp4`
+                );
+                resultUrl = uploadResult.url;
+
+                // Cache the uploaded URL in job data
+                const currentData = job.data as Record<string, unknown>;
+                await job.updateData({
+                  ...currentData,
+                  uploadedUrl: resultUrl,
+                  completedResult: {
+                    url: resultUrl,
+                    contentType,
+                    fileSizeBytes,
+                    processingTimeMs: 0
+                  }
+                });
+
+                logger.info({ jobId, url: resultUrl, size: fileSizeBytes }, 'Modal InfiniteTalk video uploaded to R2');
+              }
+
+              // Send webhook if configured
+              if (jobData.webhookUrl) {
+                await sendWebhook(jobData.webhookUrl, jobId, 'completed', {
+                  url: resultUrl,
+                  fileSizeBytes,
+                  processingTimeMs: 0
+                });
+              }
+
+              return c.json(
+                {
+                  status: 'completed' as const,
+                  jobId,
+                  model,
+                  result: {
+                    url: resultUrl,
+                    contentType,
+                    fileSizeBytes,
+                    width: 0,
+                    height: 0
+                  },
+                  processingTimeMs: 0,
+                  createdAt,
+                  completedAt: new Date().toISOString()
+                },
+                200
+              );
+            }
+            break;
+          }
+
+          case 'failed': {
+            const errorMsg = modalStatus.error ?? 'Job failed on Modal';
+
+            // Update job data with error
+            const failedJobData = job.data as Record<string, unknown>;
+            await job.updateData({
+              ...failedJobData,
+              failedError: errorMsg,
+              failedAt: Date.now()
+            });
+
+            if (jobData.webhookUrl) {
+              await sendWebhook(jobData.webhookUrl, jobId, 'failed', undefined, errorMsg);
+            }
+
+            return c.json(
+              {
+                status: 'failed' as const,
+                jobId,
+                model,
+                error: errorMsg,
+                createdAt,
+                failedAt: new Date().toISOString()
+              },
+              200
+            );
+          }
+        }
+      }
 
       // If this is a RunPod job, fetch status from RunPod
       const endpointType =
