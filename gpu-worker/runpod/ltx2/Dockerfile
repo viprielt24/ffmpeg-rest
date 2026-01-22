@@ -18,9 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install only additional Python dependencies (not torch - use base image)
-# Install diffusers from source for latest LTX support
+# Use diffusers 0.31.0 which is compatible with PyTorch 2.4
 RUN pip install --no-cache-dir \
     runpod>=1.6.0 \
+    diffusers==0.31.0 \
     transformers>=4.40.0 \
     accelerate>=0.30.0 \
     safetensors>=0.4.0 \
@@ -30,8 +31,7 @@ RUN pip install --no-cache-dir \
     boto3>=1.34.0 \
     requests>=2.31.0 \
     Pillow>=10.0.0 \
-    sentencepiece \
-    git+https://github.com/huggingface/diffusers
+    sentencepiece
 
 # Copy handler
 COPY handler.py /workspace/handler.py
