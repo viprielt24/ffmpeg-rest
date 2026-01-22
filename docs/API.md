@@ -14,8 +14,8 @@ Authorization: Bearer YOUR_AUTH_TOKEN
 ## Table of Contents
 
 1. [AI Generation Endpoints](#ai-generation-endpoints) (GPU-powered video/image generation)
-   - [POST /api/v1/generate/wan-2](#post-apiv1generatewan-2) - Wan2.2 image-to-video
-   - [POST /api/v1/generate/bulk/wan22](#post-apiv1generatebulkwan22) - Bulk Wan2.2 generation
+   - [POST /api/v1/generate](#post-apiv1generate) - AI generation job
+   - [POST /api/v1/generate/bulk/infinitetalk](#post-apiv1generatebulkinfinitetalk) - Bulk InfiniteTalk generation
    - [GET /api/v1/generate/:jobId](#get-apiv1generatejobid) - Poll generation job status
    - [GET /api/v1/generate/bulk/:batchId](#get-apiv1generatebulkbatchid) - Poll batch status
 
@@ -35,43 +35,33 @@ Authorization: Bearer YOUR_AUTH_TOKEN
 
 ## AI Generation Endpoints
 
-GPU-powered AI video generation using Wan2.2 model. Jobs are processed on RunPod serverless infrastructure.
+GPU-powered AI video generation. Jobs are processed on RunPod serverless infrastructure.
 
-### POST /api/v1/generate/wan-2
+### POST /api/v1/generate
 
-Generate a video from a static image using Wan2.2 AI model. Converts images into realistic, animated videos.
+Create an AI generation job. Supports multiple models: LTX-2 (image-to-video), Wav2Lip (lip-sync), Z-Image (text-to-image), LongCat (audio-driven avatar), and InfiniteTalk (audio-driven video).
 
-**Use case:** Create animated content from photos, generate video assets from product images, bring artwork to life.
-
-**Request:**
+**Request (InfiniteTalk example):**
 ```bash
-curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/wan-2 \
+curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
-    "imageUrl": "https://example.com/photo.jpg",
-    "prompt": "A person smiling and waving at the camera, natural movement",
-    "negativePrompt": "blurry, distorted, low quality",
-    "width": 1280,
-    "height": 720,
-    "steps": 25,
+    "model": "infinitetalk",
+    "audioUrl": "https://example.com/speech.wav",
+    "imageUrl": "https://example.com/portrait.jpg",
+    "resolution": "720",
     "webhookUrl": "https://example.com/webhook"
   }'
 ```
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `imageUrl` | string | Yes | - | URL to source image |
-| `prompt` | string | Yes | - | Text prompt describing desired video motion/content (max 1000 chars) |
-| `negativePrompt` | string | No | - | Elements to exclude from generation (max 500 chars) |
-| `width` | number | No | 1280 | Output video width (480-1920) |
-| `height` | number | No | 720 | Output video height (480-1080) |
-| `length` | number | No | 81 | Number of frames (17-161) |
-| `steps` | number | No | 25 | Denoising steps (5-50). Higher = better quality, slower |
-| `cfg` | number | No | 3.0 | Guidance scale (1-10). Controls prompt adherence |
-| `seed` | number | No | random | Random seed for reproducibility |
-| `contextOverlap` | number | No | 48 | Frame context overlap for smoother transitions (1-80) |
-| `loraPairs` | array | No | - | LoRA model pairs for style customization (max 4) |
+| `model` | string | Yes | - | Model to use: `ltx2`, `wav2lip`, `zimage`, `longcat`, `infinitetalk` |
+| `audioUrl` | string | Yes* | - | URL to audio file (*required for infinitetalk, longcat, wav2lip) |
+| `imageUrl` | string | No* | - | URL to source image (*required for some models) |
+| `videoUrl` | string | No | - | URL to reference video (alternative to imageUrl for infinitetalk) |
+| `resolution` | string | No | "720" | Output resolution: "480" or "720" |
 | `webhookUrl` | string | No | - | Callback URL on completion |
 
 **Response (202 Accepted):**
@@ -79,40 +69,38 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/
 {
   "success": true,
   "jobId": "89",
-  "model": "wan22",
+  "model": "infinitetalk",
   "status": "queued",
   "message": "Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status."
 }
 ```
 
-**Default settings:** 720p HD (1280x720), 16:9 aspect ratio, 25 denoising steps for balanced quality and speed.
-
 ---
 
-### POST /api/v1/generate/bulk/wan22
+### POST /api/v1/generate/bulk/infinitetalk
 
-Submit multiple Wan2.2 jobs for parallel processing. Returns a batch ID to track all jobs.
+Submit multiple InfiniteTalk jobs for parallel processing. Returns a batch ID to track all jobs.
 
-**Use case:** Generate multiple video variations, process product catalog images, batch content creation.
+**Use case:** Generate multiple talking head videos, process multiple audio files with same avatar.
 
 **Request:**
 ```bash
-curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/bulk/wan22 \
+curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/bulk/infinitetalk \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -d '{
     "jobs": [
       {
-        "imageUrl": "https://example.com/photo1.jpg",
-        "prompt": "Person walking forward confidently"
+        "audioUrl": "https://example.com/audio1.wav",
+        "imageUrl": "https://example.com/portrait.jpg"
       },
       {
-        "imageUrl": "https://example.com/photo2.jpg",
-        "prompt": "Person turning head and smiling"
+        "audioUrl": "https://example.com/audio2.wav",
+        "imageUrl": "https://example.com/portrait.jpg"
       },
       {
-        "imageUrl": "https://example.com/photo3.jpg",
-        "prompt": "Person waving hand gently"
+        "audioUrl": "https://example.com/audio3.wav",
+        "imageUrl": "https://example.com/portrait.jpg"
       }
     ],
     "webhookUrl": "https://example.com/batch-webhook"
@@ -129,7 +117,7 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/
 {
   "success": true,
   "batchId": "batch_abc123def456",
-  "model": "wan22",
+  "model": "infinitetalk",
   "totalJobs": 3,
   "jobs": [
     { "jobId": "91", "status": "queued" },
@@ -157,7 +145,7 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/89 \
 {
   "status": "queued",
   "jobId": "89",
-  "model": "wan22",
+  "model": "infinitetalk",
   "createdAt": "2026-01-22T18:55:11.855Z"
 }
 ```
@@ -167,7 +155,7 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/89 \
 {
   "status": "processing",
   "jobId": "89",
-  "model": "wan22",
+  "model": "infinitetalk",
   "progress": 50,
   "startedAt": "2026-01-22T18:56:00.000Z",
   "createdAt": "2026-01-22T18:55:11.855Z"
@@ -179,13 +167,13 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/89 \
 {
   "status": "completed",
   "jobId": "89",
-  "model": "wan22",
+  "model": "infinitetalk",
   "result": {
-    "url": "https://pub-xxx.r2.dev/ffmpeg-rest/.../wan22-89.mp4",
+    "url": "https://pub-xxx.r2.dev/ffmpeg-rest/.../infinitetalk-89.mp4",
     "contentType": "video/mp4",
     "fileSizeBytes": 15234567,
-    "width": 1920,
-    "height": 1080
+    "width": 1280,
+    "height": 720
   },
   "processingTimeMs": 425000,
   "createdAt": "2026-01-22T18:55:11.855Z",
@@ -198,7 +186,7 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/89 \
 {
   "status": "failed",
   "jobId": "89",
-  "model": "wan22",
+  "model": "infinitetalk",
   "error": "RunPod worker timeout",
   "createdAt": "2026-01-22T18:55:11.855Z",
   "failedAt": "2026-01-22T19:05:11.855Z"
@@ -222,7 +210,7 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/bulk/bat
 {
   "status": "processing",
   "batchId": "batch_abc123def456",
-  "model": "wan22",
+  "model": "infinitetalk",
   "totalJobs": 3,
   "completedJobs": 1,
   "failedJobs": 0,
@@ -240,7 +228,7 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/bulk/bat
 {
   "status": "completed",
   "batchId": "batch_abc123def456",
-  "model": "wan22",
+  "model": "infinitetalk",
   "totalJobs": 3,
   "completedJobs": 3,
   "failedJobs": 0,
@@ -263,9 +251,9 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/bulk/bat
   "successfulJobs": 3,
   "failedJobs": 0,
   "results": [
-    { "jobId": "91", "model": "wan22", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 15234567, "processingTimeMs": 420000 } },
-    { "jobId": "92", "model": "wan22", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 14523456, "processingTimeMs": 435000 } },
-    { "jobId": "93", "model": "wan22", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 16234567, "processingTimeMs": 410000 } }
+    { "jobId": "91", "model": "infinitetalk", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 15234567, "processingTimeMs": 420000 } },
+    { "jobId": "92", "model": "infinitetalk", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 14523456, "processingTimeMs": 435000 } },
+    { "jobId": "93", "model": "infinitetalk", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 16234567, "processingTimeMs": 410000 } }
   ],
   "timestamp": "2026-01-22T19:10:00.000Z"
 }

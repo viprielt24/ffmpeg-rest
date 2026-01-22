@@ -50,49 +50,6 @@ interface IInfiniteTalkJobInput {
   jobId?: string;
 }
 
-// Wan2.2 Image-to-Video input
-interface IWan22LoRAPair {
-  high: string;
-  low: string;
-  high_weight?: number;
-  low_weight?: number;
-}
-
-interface IWan22JobInput {
-  imageUrl: string;
-  prompt: string;
-  negativePrompt?: string;
-  width?: number;
-  height?: number;
-  length?: number;
-  steps?: number;
-  cfg?: number;
-  seed?: number;
-  contextOverlap?: number;
-  loraPairs?: IWan22LoRAPair[];
-  jobId?: string;
-}
-
-// Wan2.2 RunPod API format
-interface IWan22RunPodInput {
-  image_url: string;
-  prompt: string;
-  negative_prompt?: string;
-  width: number;
-  height: number;
-  length: number;
-  steps: number;
-  cfg: number;
-  seed?: number;
-  context_overlap: number;
-  lora_pairs?: {
-    high: string;
-    low: string;
-    high_weight: number;
-    low_weight: number;
-  }[];
-}
-
 // InfiniteTalk RunPod API format (what the endpoint expects)
 // Based on https://github.com/wlsdml1114/Infinitetalk_Runpod_hub
 interface IInfiniteTalkRunPodInput {
@@ -128,14 +85,13 @@ interface IRunPodStatusResponse {
   error?: string;
 }
 
-type EndpointType = 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk' | 'wan22';
+type EndpointType = 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk';
 
 export interface IRunPodClient {
   submitLtx2Job(input: ILtx2JobInput): Promise<IRunPodRunResponse>;
   submitZImageJob(input: IZImageJobInput): Promise<IRunPodRunResponse>;
   submitLongCatJob(input: ILongCatJobInput): Promise<IRunPodRunResponse>;
   submitInfiniteTalkJob(input: IInfiniteTalkJobInput): Promise<IRunPodRunResponse>;
-  submitWan22Job(input: IWan22JobInput): Promise<IRunPodRunResponse>;
   getJobStatus(endpointType: EndpointType, jobId: string): Promise<IRunPodStatusResponse>;
   isConfigured(endpointType?: EndpointType): boolean;
 }
@@ -146,7 +102,6 @@ class RunPodClient implements IRunPodClient {
   private zimageEndpointId: string;
   private longcatEndpointId: string;
   private infinitetalkEndpointId: string;
-  private wan22EndpointId: string;
   private baseUrl = 'https://api.runpod.ai/v2';
 
   constructor() {
@@ -155,7 +110,6 @@ class RunPodClient implements IRunPodClient {
     this.zimageEndpointId = env.RUNPOD_ZIMAGE_ENDPOINT_ID ?? '';
     this.longcatEndpointId = env.RUNPOD_LONGCAT_ENDPOINT_ID ?? '';
     this.infinitetalkEndpointId = env.RUNPOD_INFINITETALK_ENDPOINT_ID ?? '';
-    this.wan22EndpointId = env.RUNPOD_WAN22_ENDPOINT_ID ?? '';
   }
 
   private getEndpointId(type: EndpointType): string {
@@ -168,8 +122,6 @@ class RunPodClient implements IRunPodClient {
         return this.longcatEndpointId;
       case 'infinitetalk':
         return this.infinitetalkEndpointId;
-      case 'wan22':
-        return this.wan22EndpointId;
     }
   }
 
@@ -177,11 +129,7 @@ class RunPodClient implements IRunPodClient {
     if (!this.apiKey) return false;
     if (!endpointType) {
       return Boolean(
-        this.ltx2EndpointId ||
-          this.zimageEndpointId ||
-          this.longcatEndpointId ||
-          this.infinitetalkEndpointId ||
-          this.wan22EndpointId
+        this.ltx2EndpointId || this.zimageEndpointId || this.longcatEndpointId || this.infinitetalkEndpointId
       );
     }
     return Boolean(this.getEndpointId(endpointType));
@@ -259,39 +207,6 @@ class RunPodClient implements IRunPodClient {
 
     logger.info({ input: runpodInput }, 'Submitting InfiniteTalk job with transformed parameters');
     return this.submitJob('infinitetalk', runpodInput, input.jobId);
-  }
-
-  async submitWan22Job(input: IWan22JobInput): Promise<IRunPodRunResponse> {
-    // Transform to RunPod API format
-    // Default: 1280x720 (720p HD 16:9), 81 frames, 25 steps, cfg 3.0
-    const runpodInput: IWan22RunPodInput = {
-      image_url: input.imageUrl,
-      prompt: input.prompt,
-      negative_prompt: input.negativePrompt,
-      width: input.width ?? 1280,
-      height: input.height ?? 720,
-      length: input.length ?? 81,
-      steps: input.steps ?? 25,
-      cfg: input.cfg ?? 3.0,
-      seed: input.seed,
-      context_overlap: input.contextOverlap ?? 48
-    };
-
-    // Transform LoRA pairs if provided
-    if (input.loraPairs && input.loraPairs.length > 0) {
-      runpodInput.lora_pairs = input.loraPairs.map((pair) => ({
-        high: pair.high,
-        low: pair.low,
-        high_weight: pair.high_weight ?? 1.0,
-        low_weight: pair.low_weight ?? 1.0
-      }));
-    }
-
-    logger.info(
-      { prompt: input.prompt, width: runpodInput.width, height: runpodInput.height, steps: runpodInput.steps },
-      'Submitting Wan2.2 job with parameters'
-    );
-    return this.submitJob('wan22', runpodInput, input.jobId);
   }
 
   async getJobStatus(endpointType: EndpointType, jobId: string): Promise<IRunPodStatusResponse> {
