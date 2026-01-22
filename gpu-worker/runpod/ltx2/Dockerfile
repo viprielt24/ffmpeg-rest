@@ -1,6 +1,6 @@
 # RunPod Serverless Dockerfile for LTX-Video Image-to-Video (13B Model)
-# Uses base image's PyTorch to avoid disk space issues
-FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+# Requires PyTorch 2.5+ for enable_gqa in scaled_dot_product_attention
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
 # Set environment variables
 # LTX_MODEL_ID: Use 13B model for higher quality (requires ~30GB VRAM)
