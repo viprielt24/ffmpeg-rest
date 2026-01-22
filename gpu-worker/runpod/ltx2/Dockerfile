@@ -18,10 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install only additional Python dependencies (not torch - use base image)
-# Use diffusers 0.31.0 which is compatible with PyTorch 2.4
+# Use diffusers 0.32.2 which has LTXImageToVideoPipeline
 RUN pip install --no-cache-dir \
     runpod>=1.6.0 \
-    diffusers==0.31.0 \
+    diffusers==0.32.2 \
     transformers>=4.40.0 \
     accelerate>=0.30.0 \
     safetensors>=0.4.0 \
