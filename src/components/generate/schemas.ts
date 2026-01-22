@@ -1,7 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 
 // ========== Model Enum ==========
-export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk', 'wan22']).openapi({
+export const GenerateModelSchema = z.enum(['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk']).openapi({
   description: 'AI model to use for generation',
   example: 'ltx2'
 });
@@ -185,132 +185,6 @@ export const InfiniteTalkRequestSchema = z.object({
 
 export type IInfiniteTalkRequest = z.infer<typeof InfiniteTalkRequestSchema>;
 
-// ========== Wan2.2 Request Schema (Image-to-Video with LoRA) ==========
-export const Wan22LoRAPairSchema = z.object({
-  high: z.string().openapi({
-    description: 'High-detail LoRA model filename',
-    example: 'lora1_high.safetensors'
-  }),
-  low: z.string().openapi({
-    description: 'Low-detail LoRA model filename',
-    example: 'lora1_low.safetensors'
-  }),
-  highWeight: z.number().min(0).max(2).default(1.0).optional().openapi({
-    description: 'Weight for high-detail LoRA (0-2)',
-    example: 1.0
-  }),
-  lowWeight: z.number().min(0).max(2).default(1.0).optional().openapi({
-    description: 'Weight for low-detail LoRA (0-2)',
-    example: 1.0
-  })
-});
-
-export type IWan22LoRAPair = z.infer<typeof Wan22LoRAPairSchema>;
-
-// Wan2.2 request without model field (for dedicated endpoint)
-export const Wan2SingleRequestSchema = z.object({
-  imageUrl: z.string().url().openapi({
-    description: 'URL to the source image',
-    example: 'https://example.com/input.jpg'
-  }),
-  prompt: z.string().min(1).max(1000).openapi({
-    description: 'Text prompt describing desired video content',
-    example: 'A person walking gracefully through a garden'
-  }),
-  negativePrompt: z.string().max(500).optional().openapi({
-    description: 'Elements to exclude from generation',
-    example: 'blurry, low quality, distorted, deformed'
-  }),
-  width: z.number().int().min(480).max(1920).default(1280).optional().openapi({
-    description: 'Output video width (default: 1280 for 720p HD)',
-    example: 1280
-  }),
-  height: z.number().int().min(480).max(1080).default(720).optional().openapi({
-    description: 'Output video height (default: 720 for 720p HD)',
-    example: 720
-  }),
-  length: z.number().int().min(17).max(161).default(81).optional().openapi({
-    description: 'Number of frames in video (17-161, default: 81)',
-    example: 81
-  }),
-  steps: z.number().int().min(5).max(50).default(25).optional().openapi({
-    description: 'Denoising steps (5-50). Higher = better quality but slower. Default: 25',
-    example: 25
-  }),
-  cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
-    description: 'Guidance scale strength (1-10). Default: 3.0 for balanced quality',
-    example: 3.0
-  }),
-  seed: z.number().int().optional().openapi({
-    description: 'Random seed for reproducibility. Omit for random seed',
-    example: 42
-  }),
-  contextOverlap: z.number().int().min(1).max(80).default(48).optional().openapi({
-    description: 'Frame context overlap for smoother transitions (1-80)',
-    example: 48
-  }),
-  loraPairs: z.array(Wan22LoRAPairSchema).max(4).optional().openapi({
-    description: 'Optional LoRA model pairs for style customization (max 4 pairs)'
-  }),
-  webhookUrl: z.string().url().optional().openapi({
-    description: 'URL to call when processing completes'
-  })
-});
-
-export type IWan2SingleRequest = z.infer<typeof Wan2SingleRequestSchema>;
-
-export const Wan22RequestSchema = z.object({
-  model: z.literal('wan22'),
-  imageUrl: z.string().url().openapi({
-    description: 'URL to the source image',
-    example: 'https://example.com/input.jpg'
-  }),
-  prompt: z.string().min(1).max(1000).openapi({
-    description: 'Text prompt describing desired video content',
-    example: 'A person walking gracefully through a garden'
-  }),
-  negativePrompt: z.string().max(500).optional().openapi({
-    description: 'Elements to exclude from generation',
-    example: 'blurry, low quality, distorted, deformed'
-  }),
-  width: z.number().int().min(480).max(1920).default(1280).optional().openapi({
-    description: 'Output video width (default: 1280 for 720p HD)',
-    example: 1280
-  }),
-  height: z.number().int().min(480).max(1080).default(720).optional().openapi({
-    description: 'Output video height (default: 720 for 720p HD)',
-    example: 720
-  }),
-  length: z.number().int().min(17).max(161).default(81).optional().openapi({
-    description: 'Number of frames in video (17-161, default: 81)',
-    example: 81
-  }),
-  steps: z.number().int().min(5).max(50).default(25).optional().openapi({
-    description: 'Denoising steps (5-50). Higher = better quality but slower. Default: 25',
-    example: 25
-  }),
-  cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
-    description: 'Guidance scale strength (1-10). Default: 3.0 for balanced quality',
-    example: 3.0
-  }),
-  seed: z.number().int().optional().openapi({
-    description: 'Random seed for reproducibility. Omit for random seed',
-    example: 42
-  }),
-  contextOverlap: z.number().int().min(1).max(80).default(48).optional().openapi({
-    description: 'Frame context overlap for smoother transitions (1-80)',
-    example: 48
-  }),
-  loraPairs: z.array(Wan22LoRAPairSchema).max(4).optional().openapi({
-    description: 'Optional LoRA model pairs for style customization (max 4 pairs)'
-  }),
-  webhookUrl: z.string().url().optional().openapi({
-    description: 'URL to call when processing completes'
-  })
-});
-
-export type IWan22Request = z.infer<typeof Wan22RequestSchema>;
-
 // ========== Bulk InfiniteTalk Request Schema ==========
 export const BulkInfiniteTalkJobSchema = z.object({
   audioUrl: z.string().url().openapi({
@@ -344,64 +218,6 @@ export const BulkInfiniteTalkRequestSchema = z.object({
 
 export type IBulkInfiniteTalkRequest = z.infer<typeof BulkInfiniteTalkRequestSchema>;
 
-// ========== Bulk Wan2.2 Request Schema ==========
-export const BulkWan22JobSchema = z.object({
-  imageUrl: z.string().url().openapi({
-    description: 'URL to the source image',
-    example: 'https://example.com/input.jpg'
-  }),
-  prompt: z.string().min(1).max(1000).openapi({
-    description: 'Text prompt describing desired video content',
-    example: 'A person walking gracefully through a garden'
-  }),
-  negativePrompt: z.string().max(500).optional().openapi({
-    description: 'Elements to exclude from generation',
-    example: 'blurry, low quality, distorted, deformed'
-  }),
-  width: z.number().int().min(480).max(1920).default(1280).optional().openapi({
-    description: 'Output video width (default: 1280 for 720p HD)',
-    example: 1280
-  }),
-  height: z.number().int().min(480).max(1080).default(720).optional().openapi({
-    description: 'Output video height (default: 720 for 720p HD)',
-    example: 720
-  }),
-  length: z.number().int().min(17).max(161).default(81).optional().openapi({
-    description: 'Number of frames in video (17-161, default: 81)',
-    example: 81
-  }),
-  steps: z.number().int().min(5).max(50).default(25).optional().openapi({
-    description: 'Denoising steps (5-50). Higher = better quality but slower',
-    example: 25
-  }),
-  cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
-    description: 'Guidance scale strength (1-10)',
-    example: 3.0
-  }),
-  seed: z.number().int().optional().openapi({
-    description: 'Random seed for reproducibility'
-  }),
-  contextOverlap: z.number().int().min(1).max(80).default(48).optional().openapi({
-    description: 'Frame context overlap for smoother transitions'
-  }),
-  loraPairs: z.array(Wan22LoRAPairSchema).max(4).optional().openapi({
-    description: 'Optional LoRA model pairs for style customization (max 4 pairs)'
-  })
-});
-
-export type IBulkWan22Job = z.infer<typeof BulkWan22JobSchema>;
-
-export const BulkWan22RequestSchema = z.object({
-  jobs: z.array(BulkWan22JobSchema).min(1).max(50).openapi({
-    description: 'Array of Wan2.2 jobs to process (1-50 jobs)'
-  }),
-  webhookUrl: z.string().url().optional().openapi({
-    description: 'URL to call when ALL jobs complete'
-  })
-});
-
-export type IBulkWan22Request = z.infer<typeof BulkWan22RequestSchema>;
-
 // ========== Bulk Response Schemas ==========
 export const BulkJobStatusSchema = z.object({
   jobId: z.string(),
@@ -414,7 +230,7 @@ export const BulkGenerateResponseSchema = z.object({
     description: 'Unique batch identifier',
     example: 'batch_abc123def456'
   }),
-  model: z.enum(['infinitetalk', 'wan22']).openapi({
+  model: z.literal('infinitetalk').openapi({
     description: 'Model used for this batch'
   }),
   totalJobs: z.number(),
@@ -443,7 +259,7 @@ export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('pending'),
     batchId: z.string(),
-    model: z.enum(['infinitetalk', 'wan22']),
+    model: z.literal('infinitetalk'),
     totalJobs: z.number(),
     completedJobs: z.literal(0),
     failedJobs: z.literal(0),
@@ -454,7 +270,7 @@ export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('processing'),
     batchId: z.string(),
-    model: z.enum(['infinitetalk', 'wan22']),
+    model: z.literal('infinitetalk'),
     totalJobs: z.number(),
     completedJobs: z.number(),
     failedJobs: z.number(),
@@ -465,7 +281,7 @@ export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('completed'),
     batchId: z.string(),
-    model: z.enum(['infinitetalk', 'wan22']),
+    model: z.literal('infinitetalk'),
     totalJobs: z.number(),
     completedJobs: z.number(),
     failedJobs: z.literal(0),
@@ -477,7 +293,7 @@ export const BatchStatusResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('partial_failure'),
     batchId: z.string(),
-    model: z.enum(['infinitetalk', 'wan22']),
+    model: z.literal('infinitetalk'),
     totalJobs: z.number(),
     completedJobs: z.number(),
     failedJobs: z.number(),
@@ -495,8 +311,7 @@ export const GenerateRequestSchema = z.discriminatedUnion('model', [
   Wav2LipRequestSchema,
   ZImageRequestSchema,
   LongCatRequestSchema,
-  InfiniteTalkRequestSchema,
-  Wan22RequestSchema
+  InfiniteTalkRequestSchema
 ]);
 
 export type IGenerateRequest = z.infer<typeof GenerateRequestSchema>;
@@ -858,118 +673,6 @@ export const getBatchStatusRoute = createRoute({
         }
       },
       description: 'Batch not found'
-    },
-    401: {
-      content: {
-        'application/json': {
-          schema: GenerateErrorSchema
-        }
-      },
-      description: 'Unauthorized'
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: GenerateErrorSchema
-        }
-      },
-      description: 'Internal server error'
-    }
-  }
-});
-
-/**
- * POST /api/v1/generate/wan-2 - Create Wan2.2 image-to-video job (dedicated endpoint)
- */
-export const wan2SingleRoute = createRoute({
-  method: 'post',
-  path: '/api/v1/generate/wan-2',
-  tags: ['Generate', 'Wan-2'],
-  summary: 'Create Wan2.2 image-to-video job',
-  description:
-    'Queue a Wan2.2 image-to-video generation job. Converts a static image into a video using AI. Default settings produce 1080p HD 16:9 videos with best quality.',
-  request: {
-    body: {
-      content: {
-        'application/json': {
-          schema: Wan2SingleRequestSchema
-        }
-      },
-      required: true
-    }
-  },
-  responses: {
-    202: {
-      content: {
-        'application/json': {
-          schema: GenerateJobQueuedResponseSchema
-        }
-      },
-      description: 'Job queued successfully'
-    },
-    400: {
-      content: {
-        'application/json': {
-          schema: GenerateErrorSchema
-        }
-      },
-      description: 'Invalid request parameters'
-    },
-    401: {
-      content: {
-        'application/json': {
-          schema: GenerateErrorSchema
-        }
-      },
-      description: 'Unauthorized'
-    },
-    500: {
-      content: {
-        'application/json': {
-          schema: GenerateErrorSchema
-        }
-      },
-      description: 'Internal server error'
-    }
-  }
-});
-
-/**
- * POST /api/v1/generate/bulk/wan22 - Submit bulk Wan2.2 jobs
- */
-export const bulkWan22Route = createRoute({
-  method: 'post',
-  path: '/api/v1/generate/bulk/wan22',
-  tags: ['Generate', 'Bulk'],
-  summary: 'Submit bulk Wan2.2 image-to-video jobs',
-  description:
-    'Queue multiple Wan2.2 image-to-video jobs for parallel processing. Default settings produce 1080p HD 16:9 videos with best quality. Returns a batch ID to poll for status.',
-  request: {
-    body: {
-      content: {
-        'application/json': {
-          schema: BulkWan22RequestSchema
-        }
-      },
-      required: true
-    }
-  },
-  responses: {
-    202: {
-      content: {
-        'application/json': {
-          schema: BulkGenerateResponseSchema
-        }
-      },
-      description: 'Batch queued successfully'
-    },
-    400: {
-      content: {
-        'application/json': {
-          schema: GenerateErrorSchema
-        }
-      },
-      description: 'Invalid request parameters'
     },
     401: {
       content: {

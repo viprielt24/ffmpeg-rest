@@ -20,8 +20,7 @@ export const JobType = {
   GENERATE_WAV2LIP: 'generate:wav2lip',
   GENERATE_ZIMAGE: 'generate:zimage',
   GENERATE_LONGCAT: 'generate:longcat',
-  GENERATE_INFINITETALK: 'generate:infinitetalk',
-  GENERATE_WAN22: 'generate:wan22'
+  GENERATE_INFINITETALK: 'generate:infinitetalk'
 } as const;
 
 export type JobTypeName = (typeof JobType)[keyof typeof JobType];

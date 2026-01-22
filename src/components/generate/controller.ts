@@ -5,17 +5,13 @@ import {
   getGenerateStatusRoute,
   webhookCompleteRoute,
   bulkInfiniteTalkRoute,
-  bulkWan22Route,
   getBatchStatusRoute,
-  wan2SingleRoute,
   type IGenerateRequest,
   type IGenerateJobStatus,
   type IWebhookCallback,
   type GenerateModel,
   type IBulkInfiniteTalkRequest,
-  type IBulkWan22Request,
-  type IBatchStatusResponse,
-  type IWan2SingleRequest
+  type IBatchStatusResponse
 } from './schemas';
 import { queue, JobType } from '~/queue';
 import { logger } from '~/config/logger';
@@ -31,8 +27,7 @@ const MODEL_TO_JOB_TYPE: Record<GenerateModel, string> = {
   wav2lip: JobType.GENERATE_WAV2LIP,
   zimage: JobType.GENERATE_ZIMAGE,
   longcat: JobType.GENERATE_LONGCAT,
-  infinitetalk: JobType.GENERATE_INFINITETALK,
-  wan22: JobType.GENERATE_WAN22
+  infinitetalk: JobType.GENERATE_INFINITETALK
 };
 
 // Map job types back to model names
@@ -41,8 +36,7 @@ const JOB_TYPE_TO_MODEL: Record<string, GenerateModel> = {
   [JobType.GENERATE_WAV2LIP]: 'wav2lip',
   [JobType.GENERATE_ZIMAGE]: 'zimage',
   [JobType.GENERATE_LONGCAT]: 'longcat',
-  [JobType.GENERATE_INFINITETALK]: 'infinitetalk',
-  [JobType.GENERATE_WAN22]: 'wan22'
+  [JobType.GENERATE_INFINITETALK]: 'infinitetalk'
 };
 
 export function registerGenerateRoutes(app: OpenAPIHono) {
@@ -358,98 +352,6 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
           };
           break;
         }
-
-        case 'wan22': {
-          // Type assertion for Wan2.2 request
-          const wan22Body = body as import('./schemas').IWan22Request;
-
-          // Check if RunPod is configured for Wan2.2
-          if (runpodClient.isConfigured('wan22')) {
-            logger.info({ model }, 'Using RunPod for Wan2.2 job');
-
-            const placeholderData = {
-              type: jobType,
-              model: 'wan22',
-              imageUrl: wan22Body.imageUrl,
-              prompt: wan22Body.prompt,
-              negativePrompt: wan22Body.negativePrompt,
-              width: wan22Body.width ?? 1280,
-              height: wan22Body.height ?? 720,
-              length: wan22Body.length ?? 81,
-              steps: wan22Body.steps ?? 25,
-              cfg: wan22Body.cfg ?? 3.0,
-              seed: wan22Body.seed,
-              contextOverlap: wan22Body.contextOverlap ?? 48,
-              loraPairs: wan22Body.loraPairs,
-              webhookUrl: wan22Body.webhookUrl,
-              createdAt: Date.now(),
-              useRunPod: true,
-              runpodJobId: '',
-              runpodEndpointType: 'wan22' as const
-            };
-
-            const job = await queue.add(jobType, placeholderData);
-            const ourJobId = job.id ?? '';
-
-            const runpodResponse = await runpodClient.submitWan22Job({
-              imageUrl: wan22Body.imageUrl ?? '',
-              prompt: wan22Body.prompt ?? '',
-              negativePrompt: wan22Body.negativePrompt,
-              width: wan22Body.width ?? 1280,
-              height: wan22Body.height ?? 720,
-              length: wan22Body.length ?? 81,
-              steps: wan22Body.steps ?? 25,
-              cfg: wan22Body.cfg ?? 3.0,
-              seed: wan22Body.seed,
-              contextOverlap: wan22Body.contextOverlap ?? 48,
-              loraPairs: wan22Body.loraPairs?.map((p) => ({
-                high: p.high,
-                low: p.low,
-                high_weight: p.highWeight,
-                low_weight: p.lowWeight
-              })),
-              jobId: ourJobId
-            });
-
-            await job.updateData({
-              ...placeholderData,
-              runpodJobId: runpodResponse.id
-            });
-
-            logger.info({ jobId: ourJobId, runpodJobId: runpodResponse.id }, 'Wan2.2 job submitted to RunPod');
-
-            return c.json(
-              {
-                success: true as const,
-                jobId: ourJobId,
-                model,
-                status: 'queued' as const,
-                message: 'Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status.'
-              },
-              202
-            );
-          }
-
-          // Fallback to BullMQ if RunPod not configured
-          jobData = {
-            type: jobType,
-            model: 'wan22',
-            imageUrl: wan22Body.imageUrl,
-            prompt: wan22Body.prompt,
-            negativePrompt: wan22Body.negativePrompt,
-            width: wan22Body.width ?? 1920,
-            height: wan22Body.height ?? 1080,
-            length: wan22Body.length ?? 81,
-            steps: wan22Body.steps ?? 30,
-            cfg: wan22Body.cfg ?? 3.0,
-            seed: wan22Body.seed,
-            contextOverlap: wan22Body.contextOverlap ?? 48,
-            loraPairs: wan22Body.loraPairs,
-            webhookUrl: wan22Body.webhookUrl,
-            createdAt: Date.now()
-          };
-          break;
-        }
       }
 
       const job = await queue.add(jobType, jobData);
@@ -473,122 +375,6 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
     }
   });
 
-  // POST /api/v1/generate/wan-2 (dedicated Wan2.2 endpoint)
-  app.openapi(wan2SingleRoute, async (c) => {
-    try {
-      const body = c.req.valid('json') as IWan2SingleRequest;
-      const model = 'wan22' as const;
-      const jobType = JobType.GENERATE_WAN22;
-
-      logger.info({ model, jobType }, 'Queueing Wan2.2 job via dedicated endpoint');
-
-      // Check if RunPod is configured for Wan2.2
-      if (runpodClient.isConfigured('wan22')) {
-        logger.info({ model }, 'Using RunPod for Wan2.2 job');
-
-        const placeholderData = {
-          type: jobType,
-          model: 'wan22',
-          imageUrl: body.imageUrl,
-          prompt: body.prompt,
-          negativePrompt: body.negativePrompt,
-          width: body.width ?? 1280,
-          height: body.height ?? 720,
-          length: body.length ?? 81,
-          steps: body.steps ?? 25,
-          cfg: body.cfg ?? 3.0,
-          seed: body.seed,
-          contextOverlap: body.contextOverlap ?? 48,
-          loraPairs: body.loraPairs,
-          webhookUrl: body.webhookUrl,
-          createdAt: Date.now(),
-          useRunPod: true,
-          runpodJobId: '',
-          runpodEndpointType: 'wan22' as const
-        };
-
-        const job = await queue.add(jobType, placeholderData);
-        const ourJobId = job.id ?? '';
-
-        const runpodResponse = await runpodClient.submitWan22Job({
-          imageUrl: body.imageUrl ?? '',
-          prompt: body.prompt ?? '',
-          negativePrompt: body.negativePrompt,
-          width: body.width ?? 1280,
-          height: body.height ?? 720,
-          length: body.length ?? 81,
-          steps: body.steps ?? 25,
-          cfg: body.cfg ?? 3.0,
-          seed: body.seed,
-          contextOverlap: body.contextOverlap ?? 48,
-          loraPairs: body.loraPairs?.map((p) => ({
-            high: p.high,
-            low: p.low,
-            high_weight: p.highWeight,
-            low_weight: p.lowWeight
-          })),
-          jobId: ourJobId
-        });
-
-        await job.updateData({
-          ...placeholderData,
-          runpodJobId: runpodResponse.id
-        });
-
-        logger.info({ jobId: ourJobId, runpodJobId: runpodResponse.id }, 'Wan2.2 job submitted to RunPod');
-
-        return c.json(
-          {
-            success: true as const,
-            jobId: ourJobId,
-            model,
-            status: 'queued' as const,
-            message: 'Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status.'
-          },
-          202
-        );
-      }
-
-      // Fallback to BullMQ if RunPod not configured
-      const jobData = {
-        type: jobType,
-        model: 'wan22',
-        imageUrl: body.imageUrl,
-        prompt: body.prompt,
-        negativePrompt: body.negativePrompt,
-        width: body.width ?? 1920,
-        height: body.height ?? 1080,
-        length: body.length ?? 81,
-        steps: body.steps ?? 30,
-        cfg: body.cfg ?? 3.0,
-        seed: body.seed,
-        contextOverlap: body.contextOverlap ?? 48,
-        loraPairs: body.loraPairs,
-        webhookUrl: body.webhookUrl,
-        createdAt: Date.now()
-      };
-
-      const job = await queue.add(jobType, jobData);
-
-      logger.info({ jobId: job.id, model }, 'Wan2.2 job queued');
-
-      return c.json(
-        {
-          success: true as const,
-          jobId: job.id ?? '',
-          model,
-          status: 'queued' as const,
-          message: 'Job queued. Poll GET /api/v1/generate/{jobId} for status.'
-        },
-        202
-      );
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error({ error: errorMessage }, 'Failed to queue Wan2.2 job');
-      return c.json({ error: 'Failed to queue job', details: { message: errorMessage } }, 500);
-    }
-  });
-
   // GET /api/v1/generate/:jobId
   app.openapi(getGenerateStatusRoute, async (c) => {
     try {
@@ -606,7 +392,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         createdAt?: number;
         useRunPod?: boolean;
         runpodJobId?: string;
-        runpodEndpointType?: 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk' | 'wan22';
+        runpodEndpointType?: 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk';
         webhookUrl?: string;
         uploadedUrl?: string; // Cached URL for base64 video uploads
       };
@@ -654,8 +440,8 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
               const resultHeight = output.height ?? 0;
               const processingTimeMs = output.processingTimeMs ?? 0;
 
-              // InfiniteTalk and Wan2.2 return base64 video instead of URL
-              if ((endpointType === 'infinitetalk' || endpointType === 'wan22') && output.video) {
+              // InfiniteTalk returns base64 video instead of URL
+              if (endpointType === 'infinitetalk' && output.video) {
                 // Check if we already uploaded this (cached URL)
                 if (jobData.uploadedUrl) {
                   resultUrl = jobData.uploadedUrl;
@@ -765,7 +551,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
 
       // Extract model from job data or type
       let model: GenerateModel;
-      if (jobData.model && ['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk', 'wan22'].includes(jobData.model)) {
+      if (jobData.model && ['ltx2', 'wav2lip', 'zimage', 'longcat', 'infinitetalk'].includes(jobData.model)) {
         model = jobData.model as GenerateModel;
       } else if (jobData.type && jobData.type in JOB_TYPE_TO_MODEL) {
         const mappedModel = JOB_TYPE_TO_MODEL[jobData.type];
@@ -1030,108 +816,6 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
     }
   });
 
-  // POST /api/v1/generate/bulk/wan22
-  app.openapi(bulkWan22Route, async (c) => {
-    try {
-      const body = c.req.valid('json') as IBulkWan22Request;
-      const { jobs, webhookUrl } = body;
-
-      // Verify RunPod is configured for Wan2.2
-      if (!runpodClient.isConfigured('wan22')) {
-        return c.json({ error: 'Wan2.2 is not configured on RunPod' }, 500);
-      }
-
-      logger.info({ jobCount: jobs.length, webhookUrl }, 'Processing bulk Wan2.2 request');
-
-      // Submit all jobs to RunPod in parallel
-      const jobPromises = jobs.map(async (jobInput, index) => {
-        // Create a placeholder job in queue to track status
-        const placeholderData = {
-          type: JobType.GENERATE_WAN22,
-          model: 'wan22',
-          imageUrl: jobInput.imageUrl,
-          prompt: jobInput.prompt,
-          negativePrompt: jobInput.negativePrompt,
-          width: jobInput.width ?? 1280,
-          height: jobInput.height ?? 720,
-          length: jobInput.length ?? 81,
-          steps: jobInput.steps ?? 25,
-          cfg: jobInput.cfg ?? 3.0,
-          seed: jobInput.seed,
-          contextOverlap: jobInput.contextOverlap ?? 48,
-          loraPairs: jobInput.loraPairs,
-          createdAt: Date.now(),
-          useRunPod: true,
-          runpodJobId: '',
-          runpodEndpointType: 'wan22' as const,
-          isBulkJob: true
-        };
-
-        const job = await queue.add(JobType.GENERATE_WAN22, placeholderData);
-        const ourJobId = job.id ?? '';
-
-        // Submit to RunPod
-        const runpodResponse = await runpodClient.submitWan22Job({
-          imageUrl: jobInput.imageUrl,
-          prompt: jobInput.prompt,
-          negativePrompt: jobInput.negativePrompt,
-          width: jobInput.width ?? 1280,
-          height: jobInput.height ?? 720,
-          length: jobInput.length ?? 81,
-          steps: jobInput.steps ?? 25,
-          cfg: jobInput.cfg ?? 3.0,
-          seed: jobInput.seed,
-          contextOverlap: jobInput.contextOverlap ?? 48,
-          loraPairs: jobInput.loraPairs?.map((p) => ({
-            high: p.high,
-            low: p.low,
-            high_weight: p.highWeight,
-            low_weight: p.lowWeight
-          })),
-          jobId: ourJobId
-        });
-
-        // Update job with RunPod job ID
-        await job.updateData({
-          ...placeholderData,
-          runpodJobId: runpodResponse.id
-        });
-
-        logger.info({ jobId: ourJobId, runpodJobId: runpodResponse.id, index }, 'Bulk Wan2.2 job submitted to RunPod');
-
-        return {
-          jobId: ourJobId,
-          status: 'queued' as const
-        };
-      });
-
-      // Wait for all job submissions
-      const submittedJobs = await Promise.all(jobPromises);
-      const jobIds = submittedJobs.map((j) => j.jobId);
-
-      // Create batch for tracking
-      const batchMetadata = await createBatch(jobIds, 'wan22', webhookUrl);
-
-      logger.info({ batchId: batchMetadata.batchId, totalJobs: jobIds.length }, 'Bulk Wan2.2 batch created');
-
-      return c.json(
-        {
-          success: true as const,
-          batchId: batchMetadata.batchId,
-          model: 'wan22' as const,
-          totalJobs: jobs.length,
-          jobs: submittedJobs,
-          message: `Batch queued. Poll GET /api/v1/generate/bulk/${batchMetadata.batchId} for status.`
-        },
-        202
-      );
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error({ error: errorMessage }, 'Failed to create bulk Wan2.2 batch');
-      return c.json({ error: 'Failed to create batch', details: { message: errorMessage } }, 500);
-    }
-  });
-
   // GET /api/v1/generate/bulk/:batchId
   app.openapi(getBatchStatusRoute, async (c) => {
     try {
@@ -1162,7 +846,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         const jobData = job.data as {
           useRunPod?: boolean;
           runpodJobId?: string;
-          runpodEndpointType?: 'infinitetalk' | 'wan22';
+          runpodEndpointType?: 'infinitetalk';
           uploadedUrl?: string;
           completedResult?: {
             url: string;
@@ -1194,7 +878,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
                   let fileSizeBytes = output.fileSizeBytes ?? 0;
                   const processingTimeMs = output.processingTimeMs ?? 0;
 
-                  // InfiniteTalk and Wan2.2 return base64 video - upload to R2 if not cached
+                  // InfiniteTalk returns base64 video - upload to R2 if not cached
                   if (output.video && !jobData.uploadedUrl) {
                     logger.info({ jobId }, `Decoding batch ${endpointType} base64 video and uploading to R2`);
                     const videoBuffer = Buffer.from(output.video, 'base64');
