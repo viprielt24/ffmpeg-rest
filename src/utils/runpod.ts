@@ -263,15 +263,15 @@ class RunPodClient implements IRunPodClient {
 
   async submitWan22Job(input: IWan22JobInput): Promise<IRunPodRunResponse> {
     // Transform to RunPod API format
-    // Default: 1920x1080 (1080p HD 16:9), 81 frames, 30 steps, cfg 3.0
+    // Default: 1280x720 (720p HD 16:9), 81 frames, 25 steps, cfg 3.0
     const runpodInput: IWan22RunPodInput = {
       image_url: input.imageUrl,
       prompt: input.prompt,
       negative_prompt: input.negativePrompt,
-      width: input.width ?? 1920,
-      height: input.height ?? 1080,
+      width: input.width ?? 1280,
+      height: input.height ?? 720,
       length: input.length ?? 81,
-      steps: input.steps ?? 30,
+      steps: input.steps ?? 25,
       cfg: input.cfg ?? 3.0,
       seed: input.seed,
       context_overlap: input.contextOverlap ?? 48

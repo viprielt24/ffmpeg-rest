@@ -221,21 +221,21 @@ export const Wan2SingleRequestSchema = z.object({
     description: 'Elements to exclude from generation',
     example: 'blurry, low quality, distorted, deformed'
   }),
-  width: z.number().int().min(480).max(1920).default(1920).optional().openapi({
-    description: 'Output video width (default: 1920 for 1080p HD)',
-    example: 1920
+  width: z.number().int().min(480).max(1920).default(1280).optional().openapi({
+    description: 'Output video width (default: 1280 for 720p HD)',
+    example: 1280
   }),
-  height: z.number().int().min(480).max(1080).default(1080).optional().openapi({
-    description: 'Output video height (default: 1080 for 1080p HD)',
-    example: 1080
+  height: z.number().int().min(480).max(1080).default(720).optional().openapi({
+    description: 'Output video height (default: 720 for 720p HD)',
+    example: 720
   }),
   length: z.number().int().min(17).max(161).default(81).optional().openapi({
     description: 'Number of frames in video (17-161, default: 81)',
     example: 81
   }),
-  steps: z.number().int().min(5).max(50).default(30).optional().openapi({
-    description: 'Denoising steps (5-50). Higher = better quality but slower. Default: 30 for best quality',
-    example: 30
+  steps: z.number().int().min(5).max(50).default(25).optional().openapi({
+    description: 'Denoising steps (5-50). Higher = better quality but slower. Default: 25',
+    example: 25
   }),
   cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
     description: 'Guidance scale strength (1-10). Default: 3.0 for balanced quality',
@@ -273,21 +273,21 @@ export const Wan22RequestSchema = z.object({
     description: 'Elements to exclude from generation',
     example: 'blurry, low quality, distorted, deformed'
   }),
-  width: z.number().int().min(480).max(1920).default(1920).optional().openapi({
-    description: 'Output video width (default: 1920 for 1080p HD)',
-    example: 1920
+  width: z.number().int().min(480).max(1920).default(1280).optional().openapi({
+    description: 'Output video width (default: 1280 for 720p HD)',
+    example: 1280
   }),
-  height: z.number().int().min(480).max(1080).default(1080).optional().openapi({
-    description: 'Output video height (default: 1080 for 1080p HD)',
-    example: 1080
+  height: z.number().int().min(480).max(1080).default(720).optional().openapi({
+    description: 'Output video height (default: 720 for 720p HD)',
+    example: 720
   }),
   length: z.number().int().min(17).max(161).default(81).optional().openapi({
     description: 'Number of frames in video (17-161, default: 81)',
     example: 81
   }),
-  steps: z.number().int().min(5).max(50).default(30).optional().openapi({
-    description: 'Denoising steps (5-50). Higher = better quality but slower. Default: 30 for best quality',
-    example: 30
+  steps: z.number().int().min(5).max(50).default(25).optional().openapi({
+    description: 'Denoising steps (5-50). Higher = better quality but slower. Default: 25',
+    example: 25
   }),
   cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
     description: 'Guidance scale strength (1-10). Default: 3.0 for balanced quality',
@@ -358,21 +358,21 @@ export const BulkWan22JobSchema = z.object({
     description: 'Elements to exclude from generation',
     example: 'blurry, low quality, distorted, deformed'
   }),
-  width: z.number().int().min(480).max(1920).default(1920).optional().openapi({
-    description: 'Output video width (default: 1920 for 1080p HD)',
-    example: 1920
+  width: z.number().int().min(480).max(1920).default(1280).optional().openapi({
+    description: 'Output video width (default: 1280 for 720p HD)',
+    example: 1280
   }),
-  height: z.number().int().min(480).max(1080).default(1080).optional().openapi({
-    description: 'Output video height (default: 1080 for 1080p HD)',
-    example: 1080
+  height: z.number().int().min(480).max(1080).default(720).optional().openapi({
+    description: 'Output video height (default: 720 for 720p HD)',
+    example: 720
   }),
   length: z.number().int().min(17).max(161).default(81).optional().openapi({
     description: 'Number of frames in video (17-161, default: 81)',
     example: 81
   }),
-  steps: z.number().int().min(5).max(50).default(30).optional().openapi({
+  steps: z.number().int().min(5).max(50).default(25).optional().openapi({
     description: 'Denoising steps (5-50). Higher = better quality but slower',
-    example: 30
+    example: 25
   }),
   cfg: z.number().min(1).max(10).default(3.0).optional().openapi({
     description: 'Guidance scale strength (1-10)',
