@@ -394,7 +394,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         runpodJobId?: string;
         runpodEndpointType?: 'ltx2' | 'zimage' | 'longcat' | 'infinitetalk';
         webhookUrl?: string;
-        uploadedUrl?: string; // Cached URL for InfiniteTalk base64 uploads
+        uploadedUrl?: string; // Cached URL for base64 video uploads
       };
 
       // If this is a RunPod job, fetch status from RunPod
@@ -445,15 +445,15 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
                 // Check if we already uploaded this (cached URL)
                 if (jobData.uploadedUrl) {
                   resultUrl = jobData.uploadedUrl;
-                  logger.info({ jobId, url: resultUrl }, 'Using cached InfiniteTalk upload URL');
+                  logger.info({ jobId, url: resultUrl }, `Using cached ${endpointType} upload URL`);
                 } else {
                   // Decode base64 and upload to R2
-                  logger.info({ jobId }, 'Decoding InfiniteTalk base64 video and uploading to R2');
+                  logger.info({ jobId }, `Decoding ${endpointType} base64 video and uploading to R2`);
                   const videoBuffer = Buffer.from(output.video, 'base64');
                   fileSizeBytes = videoBuffer.length;
                   contentType = 'video/mp4';
 
-                  const uploadResult = await uploadBufferToS3(videoBuffer, contentType, `infinitetalk-${jobId}.mp4`);
+                  const uploadResult = await uploadBufferToS3(videoBuffer, contentType, `${endpointType}-${jobId}.mp4`);
                   resultUrl = uploadResult.url;
 
                   // Cache the uploaded URL in job data
@@ -857,9 +857,10 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         };
 
         // If this is a RunPod job, fetch status from RunPod
-        if (jobData.useRunPod && jobData.runpodJobId && runpodClient.isConfigured('infinitetalk')) {
+        const endpointType = jobData.runpodEndpointType ?? 'infinitetalk';
+        if (jobData.useRunPod && jobData.runpodJobId && runpodClient.isConfigured(endpointType)) {
           try {
-            const runpodStatus = await runpodClient.getJobStatus('infinitetalk', jobData.runpodJobId);
+            const runpodStatus = await runpodClient.getJobStatus(endpointType, jobData.runpodJobId);
 
             switch (runpodStatus.status) {
               case 'IN_QUEUE':
@@ -879,11 +880,15 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
 
                   // InfiniteTalk returns base64 video - upload to R2 if not cached
                   if (output.video && !jobData.uploadedUrl) {
-                    logger.info({ jobId }, 'Decoding batch InfiniteTalk base64 video and uploading to R2');
+                    logger.info({ jobId }, `Decoding batch ${endpointType} base64 video and uploading to R2`);
                     const videoBuffer = Buffer.from(output.video, 'base64');
                     fileSizeBytes = videoBuffer.length;
 
-                    const uploadResult = await uploadBufferToS3(videoBuffer, 'video/mp4', `infinitetalk-${jobId}.mp4`);
+                    const uploadResult = await uploadBufferToS3(
+                      videoBuffer,
+                      'video/mp4',
+                      `${endpointType}-${jobId}.mp4`
+                    );
                     resultUrl = uploadResult.url;
 
                     // Cache the uploaded URL

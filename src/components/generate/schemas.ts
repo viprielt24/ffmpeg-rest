@@ -230,7 +230,9 @@ export const BulkGenerateResponseSchema = z.object({
     description: 'Unique batch identifier',
     example: 'batch_abc123def456'
   }),
-  model: z.literal('infinitetalk'),
+  model: z.literal('infinitetalk').openapi({
+    description: 'Model used for this batch'
+  }),
   totalJobs: z.number(),
   jobs: z.array(BulkJobStatusSchema),
   message: z.string()
