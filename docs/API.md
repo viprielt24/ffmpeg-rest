@@ -13,17 +13,263 @@ Authorization: Bearer YOUR_AUTH_TOKEN
 
 ## Table of Contents
 
-1. [Async Job Endpoints](#async-job-endpoints) (URL-based, queued processing)
+1. [AI Generation Endpoints](#ai-generation-endpoints) (GPU-powered video/image generation)
+   - [POST /api/v1/generate/wan-2](#post-apiv1generatewan-2) - Wan2.2 image-to-video
+   - [POST /api/v1/generate/bulk/wan22](#post-apiv1generatebulkwan22) - Bulk Wan2.2 generation
+   - [GET /api/v1/generate/:jobId](#get-apiv1generatejobid) - Poll generation job status
+   - [GET /api/v1/generate/bulk/:batchId](#get-apiv1generatebulkbatchid) - Poll batch status
+
+2. [Async Job Endpoints](#async-job-endpoints) (URL-based, queued processing)
    - [POST /mux](#post-mux) - Combine video + audio
    - [POST /concatenate](#post-concatenate) - Join multiple videos
    - [POST /normalize](#post-normalize) - Re-encode video to standard parameters
    - [GET /jobs/:jobId](#get-jobsjobid) - Poll job status
 
-2. [Sync Endpoints](#sync-endpoints) (File upload, immediate response)
+3. [Sync Endpoints](#sync-endpoints) (File upload, immediate response)
    - [Video](#video-endpoints)
    - [Audio](#audio-endpoints)
    - [Image](#image-endpoints)
    - [Media Info](#media-info-endpoints)
+
+---
+
+## AI Generation Endpoints
+
+GPU-powered AI video generation using Wan2.2 model. Jobs are processed on RunPod serverless infrastructure.
+
+### POST /api/v1/generate/wan-2
+
+Generate a video from a static image using Wan2.2 AI model. Converts images into realistic, animated videos.
+
+**Use case:** Create animated content from photos, generate video assets from product images, bring artwork to life.
+
+**Request:**
+```bash
+curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/wan-2 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "imageUrl": "https://example.com/photo.jpg",
+    "prompt": "A person smiling and waving at the camera, natural movement",
+    "negativePrompt": "blurry, distorted, low quality",
+    "width": 1920,
+    "height": 1080,
+    "steps": 30,
+    "webhookUrl": "https://example.com/webhook"
+  }'
+```
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `imageUrl` | string | Yes | - | URL to source image |
+| `prompt` | string | Yes | - | Text prompt describing desired video motion/content (max 1000 chars) |
+| `negativePrompt` | string | No | - | Elements to exclude from generation (max 500 chars) |
+| `width` | number | No | 1920 | Output video width (480-1920) |
+| `height` | number | No | 1080 | Output video height (480-1080) |
+| `length` | number | No | 81 | Number of frames (17-161) |
+| `steps` | number | No | 30 | Denoising steps (5-50). Higher = better quality, slower |
+| `cfg` | number | No | 3.0 | Guidance scale (1-10). Controls prompt adherence |
+| `seed` | number | No | random | Random seed for reproducibility |
+| `contextOverlap` | number | No | 48 | Frame context overlap for smoother transitions (1-80) |
+| `loraPairs` | array | No | - | LoRA model pairs for style customization (max 4) |
+| `webhookUrl` | string | No | - | Callback URL on completion |
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "jobId": "89",
+  "model": "wan22",
+  "status": "queued",
+  "message": "Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status."
+}
+```
+
+**Default settings:** 1080p HD (1920x1080), 16:9 aspect ratio, 30 denoising steps for best quality.
+
+---
+
+### POST /api/v1/generate/bulk/wan22
+
+Submit multiple Wan2.2 jobs for parallel processing. Returns a batch ID to track all jobs.
+
+**Use case:** Generate multiple video variations, process product catalog images, batch content creation.
+
+**Request:**
+```bash
+curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/bulk/wan22 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "jobs": [
+      {
+        "imageUrl": "https://example.com/photo1.jpg",
+        "prompt": "Person walking forward confidently"
+      },
+      {
+        "imageUrl": "https://example.com/photo2.jpg",
+        "prompt": "Person turning head and smiling"
+      },
+      {
+        "imageUrl": "https://example.com/photo3.jpg",
+        "prompt": "Person waving hand gently"
+      }
+    ],
+    "webhookUrl": "https://example.com/batch-webhook"
+  }'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `jobs` | array | Yes | Array of job objects (1-50 jobs). Each job has same params as single endpoint (except webhookUrl) |
+| `webhookUrl` | string | No | Callback URL when ALL jobs complete |
+
+**Response (202 Accepted):**
+```json
+{
+  "success": true,
+  "batchId": "batch_abc123def456",
+  "model": "wan22",
+  "totalJobs": 3,
+  "jobs": [
+    { "jobId": "91", "status": "queued" },
+    { "jobId": "92", "status": "queued" },
+    { "jobId": "93", "status": "queued" }
+  ],
+  "message": "Batch queued. Poll GET /api/v1/generate/bulk/batch_abc123def456 for status."
+}
+```
+
+---
+
+### GET /api/v1/generate/:jobId
+
+Poll for AI generation job status.
+
+**Request:**
+```bash
+curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/89 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Response - Queued:**
+```json
+{
+  "status": "queued",
+  "jobId": "89",
+  "model": "wan22",
+  "createdAt": "2026-01-22T18:55:11.855Z"
+}
+```
+
+**Response - Processing:**
+```json
+{
+  "status": "processing",
+  "jobId": "89",
+  "model": "wan22",
+  "progress": 50,
+  "startedAt": "2026-01-22T18:56:00.000Z",
+  "createdAt": "2026-01-22T18:55:11.855Z"
+}
+```
+
+**Response - Completed:**
+```json
+{
+  "status": "completed",
+  "jobId": "89",
+  "model": "wan22",
+  "result": {
+    "url": "https://pub-xxx.r2.dev/ffmpeg-rest/.../wan22-89.mp4",
+    "contentType": "video/mp4",
+    "fileSizeBytes": 15234567,
+    "width": 1920,
+    "height": 1080
+  },
+  "processingTimeMs": 425000,
+  "createdAt": "2026-01-22T18:55:11.855Z",
+  "completedAt": "2026-01-22T19:02:36.855Z"
+}
+```
+
+**Response - Failed:**
+```json
+{
+  "status": "failed",
+  "jobId": "89",
+  "model": "wan22",
+  "error": "RunPod worker timeout",
+  "createdAt": "2026-01-22T18:55:11.855Z",
+  "failedAt": "2026-01-22T19:05:11.855Z"
+}
+```
+
+---
+
+### GET /api/v1/generate/bulk/:batchId
+
+Poll for batch status. Returns status of all jobs in the batch.
+
+**Request:**
+```bash
+curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/bulk/batch_abc123def456 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+**Response - Processing:**
+```json
+{
+  "status": "processing",
+  "batchId": "batch_abc123def456",
+  "model": "wan22",
+  "totalJobs": 3,
+  "completedJobs": 1,
+  "failedJobs": 0,
+  "results": [
+    { "jobId": "91", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 15234567, "processingTimeMs": 420000 } },
+    { "jobId": "92", "status": "processing" },
+    { "jobId": "93", "status": "queued" }
+  ],
+  "createdAt": "2026-01-22T18:55:00.000Z"
+}
+```
+
+**Response - Completed:**
+```json
+{
+  "status": "completed",
+  "batchId": "batch_abc123def456",
+  "model": "wan22",
+  "totalJobs": 3,
+  "completedJobs": 3,
+  "failedJobs": 0,
+  "results": [
+    { "jobId": "91", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 15234567, "processingTimeMs": 420000 } },
+    { "jobId": "92", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 14523456, "processingTimeMs": 435000 } },
+    { "jobId": "93", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 16234567, "processingTimeMs": 410000 } }
+  ],
+  "createdAt": "2026-01-22T18:55:00.000Z",
+  "completedAt": "2026-01-22T19:10:00.000Z"
+}
+```
+
+**Batch webhook (sent when ALL jobs complete):**
+```json
+{
+  "batchId": "batch_abc123def456",
+  "status": "completed",
+  "totalJobs": 3,
+  "successfulJobs": 3,
+  "failedJobs": 0,
+  "results": [
+    { "jobId": "91", "model": "wan22", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 15234567, "processingTimeMs": 420000 } },
+    { "jobId": "92", "model": "wan22", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 14523456, "processingTimeMs": 435000 } },
+    { "jobId": "93", "model": "wan22", "status": "completed", "result": { "url": "https://...", "fileSizeBytes": 16234567, "processingTimeMs": 410000 } }
+  ],
+  "timestamp": "2026-01-22T19:10:00.000Z"
+}
+```
 
 ---
 
