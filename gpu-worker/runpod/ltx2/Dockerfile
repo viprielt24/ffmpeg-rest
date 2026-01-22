@@ -1,13 +1,16 @@
-# RunPod Serverless Dockerfile for LTX-2 Image-to-Video
+# RunPod Serverless Dockerfile for LTX-Video Image-to-Video (13B Model)
 # Uses base image's PyTorch to avoid disk space issues
 FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 # Set environment variables
+# LTX_MODEL_ID: Use 13B model for higher quality (requires ~30GB VRAM)
+# Options: Lightricks/LTX-Video-0.9.7-dev (13B), Lightricks/LTX-Video-0.9.7-distilled (13B faster)
+#          Lightricks/LTX-Video (2B, lower quality but fits on smaller GPUs)
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/runpod-volume/cache \
     TRANSFORMERS_CACHE=/runpod-volume/cache \
-    LTX2_MODEL_PATH=Lightricks/LTX-Video
+    LTX_MODEL_ID=Lightricks/LTX-Video-0.9.7-dev
 
 WORKDIR /workspace
 
@@ -18,10 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install only additional Python dependencies (not torch - use base image)
-# Use diffusers 0.32.2 which has LTXImageToVideoPipeline
+# Use latest diffusers from source for LTXConditionPipeline support
 RUN pip install --no-cache-dir \
     runpod>=1.6.0 \
-    diffusers==0.32.2 \
+    git+https://github.com/huggingface/diffusers.git \
     transformers>=4.40.0 \
     accelerate>=0.30.0 \
     safetensors>=0.4.0 \

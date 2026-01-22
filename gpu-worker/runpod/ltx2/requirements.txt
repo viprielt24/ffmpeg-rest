@@ -1,13 +1,14 @@
 # RunPod serverless
 runpod>=1.6.0
 
-# LTX-2 dependencies
+# LTX-Video dependencies (13B model requires diffusers 0.32+)
 torch>=2.4.0
-diffusers>=0.30.0
+diffusers>=0.32.0
 transformers>=4.40.0
 accelerate>=0.30.0
 safetensors>=0.4.0
 huggingface_hub>=0.23.0
+sentencepiece>=0.2.0
 
 # Video export
 imageio>=2.34.0
