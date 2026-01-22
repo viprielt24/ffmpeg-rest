@@ -4,17 +4,22 @@ import {
   generateRoute,
   getGenerateStatusRoute,
   webhookCompleteRoute,
+  bulkInfiniteTalkRoute,
+  getBatchStatusRoute,
   type IGenerateRequest,
   type IGenerateJobStatus,
   type IWebhookCallback,
-  type GenerateModel
+  type GenerateModel,
+  type IBulkInfiniteTalkRequest,
+  type IBatchStatusResponse
 } from './schemas';
 import { queue, JobType } from '~/queue';
 import { logger } from '~/config/logger';
 import { env } from '~/config/env';
-import { sendWebhook } from '~/utils/webhook';
+import { sendWebhook, sendBatchWebhook } from '~/utils/webhook';
 import { runpodClient } from '~/utils/runpod';
 import { uploadBufferToS3 } from '~/utils/storage';
+import { createBatch, getBatch, markBatchWebhookSent, type IBatchJobResult } from '~/utils/batch';
 
 // Map model names to job types
 const MODEL_TO_JOB_TYPE: Record<GenerateModel, string> = {
@@ -722,6 +727,324 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error({ error: errorMessage }, 'Webhook processing error');
       return c.json({ error: 'Webhook processing failed' }, 500);
+    }
+  });
+
+  // POST /api/v1/generate/bulk/infinitetalk
+  app.openapi(bulkInfiniteTalkRoute, async (c) => {
+    try {
+      const body = c.req.valid('json') as IBulkInfiniteTalkRequest;
+      const { jobs, webhookUrl } = body;
+
+      // Verify RunPod is configured for InfiniteTalk
+      if (!runpodClient.isConfigured('infinitetalk')) {
+        return c.json({ error: 'InfiniteTalk is not configured on RunPod' }, 500);
+      }
+
+      logger.info({ jobCount: jobs.length, webhookUrl }, 'Processing bulk InfiniteTalk request');
+
+      // Submit all jobs to RunPod in parallel
+      const jobPromises = jobs.map(async (jobInput, index) => {
+        // Create a placeholder job in queue to track status
+        const placeholderData = {
+          type: JobType.GENERATE_INFINITETALK,
+          model: 'infinitetalk',
+          audioUrl: jobInput.audioUrl,
+          imageUrl: jobInput.imageUrl,
+          videoUrl: jobInput.videoUrl,
+          resolution: jobInput.resolution ?? '720',
+          createdAt: Date.now(),
+          useRunPod: true,
+          runpodJobId: '',
+          runpodEndpointType: 'infinitetalk' as const,
+          isBulkJob: true
+        };
+
+        const job = await queue.add(JobType.GENERATE_INFINITETALK, placeholderData);
+        const ourJobId = job.id ?? '';
+
+        // Submit to RunPod
+        const runpodResponse = await runpodClient.submitInfiniteTalkJob({
+          audio_url: jobInput.audioUrl,
+          image_url: jobInput.imageUrl,
+          video_url: jobInput.videoUrl,
+          resolution: jobInput.resolution ?? '720',
+          jobId: ourJobId
+        });
+
+        // Update job with RunPod job ID
+        await job.updateData({
+          ...placeholderData,
+          runpodJobId: runpodResponse.id
+        });
+
+        logger.info(
+          { jobId: ourJobId, runpodJobId: runpodResponse.id, index },
+          'Bulk InfiniteTalk job submitted to RunPod'
+        );
+
+        return {
+          jobId: ourJobId,
+          status: 'queued' as const
+        };
+      });
+
+      // Wait for all job submissions
+      const submittedJobs = await Promise.all(jobPromises);
+      const jobIds = submittedJobs.map((j) => j.jobId);
+
+      // Create batch for tracking
+      const batchMetadata = await createBatch(jobIds, 'infinitetalk', webhookUrl);
+
+      logger.info({ batchId: batchMetadata.batchId, totalJobs: jobIds.length }, 'Bulk InfiniteTalk batch created');
+
+      return c.json(
+        {
+          success: true as const,
+          batchId: batchMetadata.batchId,
+          model: 'infinitetalk' as const,
+          totalJobs: jobs.length,
+          jobs: submittedJobs,
+          message: `Batch queued. Poll GET /api/v1/generate/bulk/${batchMetadata.batchId} for status.`
+        },
+        202
+      );
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error({ error: errorMessage }, 'Failed to create bulk InfiniteTalk batch');
+      return c.json({ error: 'Failed to create batch', details: { message: errorMessage } }, 500);
+    }
+  });
+
+  // GET /api/v1/generate/bulk/:batchId
+  app.openapi(getBatchStatusRoute, async (c) => {
+    try {
+      const { batchId } = c.req.valid('param');
+
+      const batchMetadata = await getBatch(batchId);
+      if (!batchMetadata) {
+        return c.json({ error: 'Batch not found' }, 404);
+      }
+
+      // Fetch status of all jobs in the batch
+      const jobResults: IBatchJobResult[] = [];
+      let completedCount = 0;
+      let failedCount = 0;
+
+      for (const jobId of batchMetadata.jobIds) {
+        const job = await queue.getJob(jobId);
+        if (!job) {
+          jobResults.push({
+            jobId,
+            status: 'failed',
+            error: 'Job not found'
+          });
+          failedCount++;
+          continue;
+        }
+
+        const jobData = job.data as {
+          useRunPod?: boolean;
+          runpodJobId?: string;
+          runpodEndpointType?: 'infinitetalk';
+          uploadedUrl?: string;
+          completedResult?: {
+            url: string;
+            fileSizeBytes: number;
+            processingTimeMs: number;
+          };
+          failedError?: string;
+        };
+
+        // If this is a RunPod job, fetch status from RunPod
+        if (jobData.useRunPod && jobData.runpodJobId && runpodClient.isConfigured('infinitetalk')) {
+          try {
+            const runpodStatus = await runpodClient.getJobStatus('infinitetalk', jobData.runpodJobId);
+
+            switch (runpodStatus.status) {
+              case 'IN_QUEUE':
+                jobResults.push({ jobId, status: 'queued' });
+                break;
+
+              case 'IN_PROGRESS':
+                jobResults.push({ jobId, status: 'processing' });
+                break;
+
+              case 'COMPLETED': {
+                const output = runpodStatus.output;
+                if (output) {
+                  let resultUrl = output.url ?? '';
+                  let fileSizeBytes = output.fileSizeBytes ?? 0;
+                  const processingTimeMs = output.processingTimeMs ?? 0;
+
+                  // InfiniteTalk returns base64 video - upload to R2 if not cached
+                  if (output.video && !jobData.uploadedUrl) {
+                    logger.info({ jobId }, 'Decoding batch InfiniteTalk base64 video and uploading to R2');
+                    const videoBuffer = Buffer.from(output.video, 'base64');
+                    fileSizeBytes = videoBuffer.length;
+
+                    const uploadResult = await uploadBufferToS3(videoBuffer, 'video/mp4', `infinitetalk-${jobId}.mp4`);
+                    resultUrl = uploadResult.url;
+
+                    // Cache the uploaded URL
+                    const currentData = job.data as Record<string, unknown>;
+                    await job.updateData({
+                      ...currentData,
+                      uploadedUrl: resultUrl,
+                      completedResult: { url: resultUrl, fileSizeBytes, processingTimeMs }
+                    });
+                  } else if (jobData.uploadedUrl) {
+                    resultUrl = jobData.uploadedUrl;
+                    fileSizeBytes = jobData.completedResult?.fileSizeBytes ?? fileSizeBytes;
+                  }
+
+                  jobResults.push({
+                    jobId,
+                    status: 'completed',
+                    result: { url: resultUrl, fileSizeBytes, processingTimeMs }
+                  });
+                  completedCount++;
+                } else {
+                  jobResults.push({ jobId, status: 'completed', result: jobData.completedResult });
+                  completedCount++;
+                }
+                break;
+              }
+
+              case 'FAILED':
+              case 'CANCELLED': {
+                const errorMsg = runpodStatus.error ?? 'Job failed on RunPod';
+                jobResults.push({ jobId, status: 'failed', error: errorMsg });
+                failedCount++;
+                break;
+              }
+
+              default:
+                jobResults.push({ jobId, status: 'queued' });
+            }
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            logger.error({ jobId, error: errMsg }, 'Failed to fetch RunPod job status');
+            jobResults.push({ jobId, status: 'failed', error: errMsg });
+            failedCount++;
+          }
+        } else {
+          // Fallback for non-RunPod jobs
+          const state = await job.getState();
+          if (state === 'completed') {
+            jobResults.push({
+              jobId,
+              status: 'completed',
+              result: jobData.completedResult
+            });
+            completedCount++;
+          } else if (state === 'failed') {
+            jobResults.push({
+              jobId,
+              status: 'failed',
+              error: jobData.failedError ?? 'Unknown error'
+            });
+            failedCount++;
+          } else if (state === 'active') {
+            jobResults.push({ jobId, status: 'processing' });
+          } else {
+            jobResults.push({ jobId, status: 'queued' });
+          }
+        }
+      }
+
+      // Calculate overall batch status
+      const totalFinished = completedCount + failedCount;
+      let batchStatus: 'pending' | 'processing' | 'completed' | 'partial_failure';
+
+      if (totalFinished === 0) {
+        batchStatus = 'pending';
+      } else if (totalFinished < batchMetadata.totalJobs) {
+        batchStatus = 'processing';
+      } else if (failedCount === 0) {
+        batchStatus = 'completed';
+      } else {
+        batchStatus = 'partial_failure';
+      }
+
+      // Send webhook if batch is complete and webhook hasn't been sent yet
+      if (
+        (batchStatus === 'completed' || batchStatus === 'partial_failure') &&
+        batchMetadata.webhookUrl &&
+        !batchMetadata.webhookSent
+      ) {
+        // Transform results for webhook
+        const webhookResults = jobResults.map((r) => ({
+          jobId: r.jobId,
+          model: 'infinitetalk',
+          status: r.status === 'completed' ? ('completed' as const) : ('failed' as const),
+          result: r.result,
+          error: r.error
+        }));
+
+        await sendBatchWebhook(
+          batchMetadata.webhookUrl,
+          batchId,
+          batchStatus === 'completed' ? 'completed' : 'partial_failure',
+          batchMetadata.totalJobs,
+          completedCount,
+          failedCount,
+          webhookResults
+        );
+
+        await markBatchWebhookSent(batchId);
+      }
+
+      // Build response based on status
+      const baseResponse = {
+        batchId,
+        model: 'infinitetalk' as const,
+        totalJobs: batchMetadata.totalJobs,
+        completedJobs: completedCount,
+        failedJobs: failedCount,
+        results: jobResults,
+        createdAt: batchMetadata.createdAt
+      };
+
+      let response: IBatchStatusResponse;
+
+      switch (batchStatus) {
+        case 'pending':
+          response = {
+            status: 'pending',
+            ...baseResponse,
+            completedJobs: 0,
+            failedJobs: 0
+          };
+          break;
+        case 'processing':
+          response = {
+            status: 'processing',
+            ...baseResponse
+          };
+          break;
+        case 'completed':
+          response = {
+            status: 'completed',
+            ...baseResponse,
+            failedJobs: 0,
+            completedAt: batchMetadata.completedAt ?? new Date().toISOString()
+          };
+          break;
+        case 'partial_failure':
+          response = {
+            status: 'partial_failure',
+            ...baseResponse,
+            completedAt: batchMetadata.completedAt ?? new Date().toISOString()
+          };
+          break;
+      }
+
+      return c.json(response, 200);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error({ error: errorMessage }, 'Failed to get batch status');
+      return c.json({ error: 'Failed to get batch status' }, 500);
     }
   });
 }
