@@ -147,6 +147,18 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
           // Force RunPod if video input is provided (WaveSpeed only supports images)
           const forceRunPod = hasVideoInput;
 
+          // Debug logging
+          logger.info(
+            {
+              requestedProvider,
+              hasVideoInput,
+              forceRunPod,
+              wavespeedConfigured: wavespeedClient.isConfigured(),
+              runpodConfigured: runpodClient.isConfigured('infinitetalk')
+            },
+            'InfiniteTalk provider selection debug'
+          );
+
           const useWaveSpeed = !forceRunPod && requestedProvider === 'wavespeed' && wavespeedClient.isConfigured();
           const useRunPod =
             (forceRunPod || requestedProvider === 'runpod') && runpodClient.isConfigured('infinitetalk');
