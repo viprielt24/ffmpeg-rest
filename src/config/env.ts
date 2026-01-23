@@ -38,10 +38,8 @@ const schema = z.object({
   RUNPOD_ZIMAGE_ENDPOINT_ID: z.string().optional(),
   RUNPOD_INFINITETALK_ENDPOINT_ID: z.string().optional(),
 
-  // Modal configuration (InfiniteTalk on Modal.com)
-  MODAL_INFINITETALK_ENDPOINT: z.string().url().optional(),
-  MODAL_INFINITETALK_STATUS_ENDPOINT: z.string().url().optional(),
-  MODAL_AUTH_TOKEN: z.string().optional()
+  // WaveSpeed configuration
+  WAVESPEED_API_KEY: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

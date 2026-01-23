@@ -98,9 +98,13 @@ export const InfiniteTalkRequestSchema = z.object({
     description: 'Output resolution (480 or 720)',
     example: '720'
   }),
-  aspectRatio: z.enum(['16:9', '9:16']).default('16:9').optional().openapi({
+  aspectRatio: z.enum(['16:9', '9:16']).default('9:16').optional().openapi({
     description: 'Output aspect ratio (16:9 horizontal or 9:16 vertical)',
-    example: '16:9'
+    example: '9:16'
+  }),
+  provider: z.enum(['wavespeed', 'runpod']).default('wavespeed').optional().openapi({
+    description: 'Provider to use (wavespeed or runpod)',
+    example: 'wavespeed'
   }),
   webhookUrl: z.string().url().optional().openapi({
     description: 'URL to call when processing completes'
@@ -127,9 +131,9 @@ export const BulkInfiniteTalkJobSchema = z.object({
     description: 'Output resolution (480 or 720)',
     example: '720'
   }),
-  aspectRatio: z.enum(['16:9', '9:16']).default('16:9').optional().openapi({
+  aspectRatio: z.enum(['16:9', '9:16']).default('9:16').optional().openapi({
     description: 'Output aspect ratio (16:9 horizontal or 9:16 vertical)',
-    example: '16:9'
+    example: '9:16'
   })
 });
 
@@ -138,6 +142,10 @@ export type IBulkInfiniteTalkJob = z.infer<typeof BulkInfiniteTalkJobSchema>;
 export const BulkInfiniteTalkRequestSchema = z.object({
   jobs: z.array(BulkInfiniteTalkJobSchema).min(1).max(50).openapi({
     description: 'Array of InfiniteTalk jobs to process (1-50 jobs)'
+  }),
+  provider: z.enum(['wavespeed', 'runpod']).default('wavespeed').optional().openapi({
+    description: 'Provider to use (wavespeed or runpod)',
+    example: 'wavespeed'
   }),
   webhookUrl: z.string().url().optional().openapi({
     description: 'URL to call when ALL jobs complete'
