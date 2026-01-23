@@ -15,6 +15,9 @@ Authorization: Bearer YOUR_AUTH_TOKEN
 
 1. [AI Generation Endpoints](#ai-generation-endpoints) (GPU-powered video/image generation)
    - [POST /api/v1/generate](#post-apiv1generate) - AI generation job
+   - [Model: InfiniteTalk](#model-infinitetalk-audio-driven-video) - Audio-driven talking head videos
+   - [Model: Z-Image](#model-z-image-text-to-image) - Text-to-image generation
+   - [Model: Wav2Lip](#model-wav2lip-lip-sync) - Video lip-sync
    - [POST /api/v1/generate/bulk/infinitetalk](#post-apiv1generatebulkinfinitetalk) - Bulk InfiniteTalk generation
    - [GET /api/v1/generate/:jobId](#get-apiv1generatejobid) - Poll generation job status
    - [GET /api/v1/generate/bulk/:batchId](#get-apiv1generatebulkbatchid) - Poll batch status
@@ -35,11 +38,21 @@ Authorization: Bearer YOUR_AUTH_TOKEN
 
 ## AI Generation Endpoints
 
-GPU-powered AI video generation. Jobs are processed on RunPod serverless infrastructure.
+GPU-powered AI video and image generation. Jobs are processed on Modal.com or RunPod serverless infrastructure.
+
+### Supported Models
+
+| Model | Type | Description | Provider |
+|-------|------|-------------|----------|
+| `infinitetalk` | Audio-to-Video | Generate talking head videos from audio + portrait | Modal (default) or RunPod |
+| `zimage` | Text-to-Image | Generate images from text prompts (Kolors Turbo) | RunPod |
+| `wav2lip` | Lip-Sync | Sync existing video lips to new audio | RunPod |
+
+---
 
 ### POST /api/v1/generate
 
-Create an AI generation job. Supports multiple models: LTX-2 (image-to-video), Wav2Lip (lip-sync), Z-Image (text-to-image), LongCat (audio-driven avatar), and InfiniteTalk (audio-driven video).
+Create an AI generation job. The `model` field determines which AI model to use and what parameters are required.
 
 **Request (InfiniteTalk example):**
 ```bash
@@ -57,12 +70,13 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate 
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `model` | string | Yes | - | Model to use: `ltx2`, `wav2lip`, `zimage`, `longcat`, `infinitetalk` |
-| `audioUrl` | string | Yes* | - | URL to audio file (*required for infinitetalk, longcat, wav2lip) |
-| `imageUrl` | string | No* | - | URL to source image (*required for some models) |
-| `videoUrl` | string | No | - | URL to reference video (alternative to imageUrl for infinitetalk) |
-| `resolution` | string | No | "720" | Output resolution: "480" or "720" |
+| `model` | string | Yes | - | Model to use: `wav2lip`, `zimage`, `infinitetalk` |
+| `audioUrl` | string | Model-specific | - | URL to audio file (required for infinitetalk, wav2lip) |
+| `imageUrl` | string | Model-specific | - | URL to source image (see model-specific params below) |
+| `videoUrl` | string | Model-specific | - | URL to reference video (see model-specific params below) |
 | `webhookUrl` | string | No | - | Callback URL on completion |
+
+See model-specific parameters below for each model's requirements.
 
 **Response (202 Accepted):**
 ```json
@@ -74,6 +88,131 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate 
   "message": "Job queued on RunPod. Poll GET /api/v1/generate/{jobId} for status."
 }
 ```
+
+---
+
+### Model: InfiniteTalk (Audio-Driven Video)
+
+Generate realistic talking head videos from a portrait image/video and audio file. The AI animates the face to match the audio lip movements.
+
+**Use cases:** AI avatars, talking head videos, podcast visualizations, virtual presenters.
+
+**Request:**
+```bash
+curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "model": "infinitetalk",
+    "audioUrl": "https://example.com/speech.wav",
+    "imageUrl": "https://example.com/portrait.jpg",
+    "resolution": "720",
+    "provider": "modal",
+    "webhookUrl": "https://example.com/webhook"
+  }'
+```
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `model` | string | Yes | - | Must be `"infinitetalk"` |
+| `audioUrl` | string | Yes | - | URL to audio file (WAV/MP3). Audio length determines video length. |
+| `imageUrl` | string | One of* | - | URL to portrait image (JPG/PNG). Face should be clearly visible. |
+| `videoUrl` | string | One of* | - | URL to reference video (MP4). Alternative to imageUrl. |
+| `resolution` | string | No | `"720"` | Output resolution: `"480"` (854x480) or `"720"` (1280x720) |
+| `provider` | string | No | `"modal"` | GPU provider: `"modal"` (recommended) or `"runpod"` |
+| `webhookUrl` | string | No | - | Callback URL when job completes |
+
+*\*Provide either `imageUrl` OR `videoUrl`, not both.*
+
+**Best practices:**
+- Use high-quality portrait images with clear, front-facing faces
+- Audio should be clear speech (WAV format preferred)
+- 720p resolution provides better quality but takes longer to process
+- Modal provider is faster and recommended for most use cases
+
+**Output:** MP4 video with the portrait animated to match the audio.
+
+---
+
+### Model: Z-Image (Text-to-Image)
+
+Generate high-quality images from text prompts using the Kolors Turbo model. Supports both English and Chinese prompts.
+
+**Use cases:** AI-generated portraits, product images, creative artwork, thumbnails.
+
+**Request:**
+```bash
+curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "model": "zimage",
+    "prompt": "A photorealistic portrait of a professional businesswoman in a modern office, natural lighting, high detail",
+    "negativePrompt": "blurry, low quality, distorted, deformed",
+    "width": 1024,
+    "height": 1024,
+    "steps": 9,
+    "guidanceScale": 0,
+    "webhookUrl": "https://example.com/webhook"
+  }'
+```
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `model` | string | Yes | - | Must be `"zimage"` |
+| `prompt` | string | Yes | - | Text description of the image to generate (1-1000 chars). Supports English and Chinese. |
+| `negativePrompt` | string | No | - | Features to avoid in the image (max 500 chars) |
+| `width` | number | No | `1024` | Output width in pixels (512-2048) |
+| `height` | number | No | `1024` | Output height in pixels (512-2048) |
+| `steps` | number | No | `30` | Inference steps (8-100). Use 8-9 for Turbo variant (faster), 20-30 for higher quality. |
+| `guidanceScale` | number | No | `0` | Guidance scale (0-20). Use 0 for Turbo variant, 7-15 for Base. |
+| `seed` | number | No | random | Random seed for reproducibility. Same seed + prompt = same image. |
+| `webhookUrl` | string | No | - | Callback URL when job completes |
+
+**Best practices:**
+- Be descriptive: "A photorealistic portrait of a woman, natural lighting" > "woman portrait"
+- Use negative prompts to avoid common artifacts: "blurry, distorted, deformed, low quality"
+- For Turbo mode (fastest): use `steps: 9` and `guidanceScale: 0`
+- For higher quality: use `steps: 30` and `guidanceScale: 7`
+- Square images (1024x1024) work best, but aspect ratios up to 2:1 are supported
+
+**Output:** PNG/JPG image at the specified dimensions.
+
+---
+
+### Model: Wav2Lip (Lip-Sync)
+
+Sync the lip movements in an existing video to match new audio. Useful for dubbing or audio replacement.
+
+**Request:**
+```bash
+curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "model": "wav2lip",
+    "videoUrl": "https://example.com/talking-head.mp4",
+    "audioUrl": "https://example.com/new-speech.wav",
+    "padTop": 0,
+    "padBottom": 10,
+    "padLeft": 0,
+    "padRight": 0,
+    "webhookUrl": "https://example.com/webhook"
+  }'
+```
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `model` | string | Yes | - | Must be `"wav2lip"` |
+| `videoUrl` | string | Yes | - | URL to source video with visible face |
+| `audioUrl` | string | Yes | - | URL to audio file to sync lips to |
+| `padTop` | number | No | `0` | Padding above mouth region (0-50) |
+| `padBottom` | number | No | `10` | Padding below mouth region (0-50) |
+| `padLeft` | number | No | `0` | Padding left of mouth region (0-50) |
+| `padRight` | number | No | `0` | Padding right of mouth region (0-50) |
+| `webhookUrl` | string | No | - | Callback URL when job completes |
+
+**Output:** MP4 video with lip-synced audio.
 
 ---
 
@@ -162,7 +301,7 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/89 \
 }
 ```
 
-**Response - Completed:**
+**Response - Completed (InfiniteTalk/Wav2Lip video):**
 ```json
 {
   "status": "completed",
@@ -178,6 +317,25 @@ curl https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/89 \
   "processingTimeMs": 425000,
   "createdAt": "2026-01-22T18:55:11.855Z",
   "completedAt": "2026-01-22T19:02:36.855Z"
+}
+```
+
+**Response - Completed (Z-Image):**
+```json
+{
+  "status": "completed",
+  "jobId": "42",
+  "model": "zimage",
+  "result": {
+    "url": "https://pub-xxx.r2.dev/ffmpeg-rest/.../zimage-42.png",
+    "contentType": "image/png",
+    "fileSizeBytes": 2345678,
+    "width": 1024,
+    "height": 1024
+  },
+  "processingTimeMs": 12000,
+  "createdAt": "2026-01-22T18:55:11.855Z",
+  "completedAt": "2026-01-22T18:55:23.855Z"
 }
 ```
 
