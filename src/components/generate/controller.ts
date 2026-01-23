@@ -221,6 +221,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
               image_url: body.imageUrl,
               video_url: body.videoUrl,
               resolution: body.resolution ?? '720',
+              aspectRatio: body.aspectRatio ?? '16:9',
               jobId: ourJobId
             });
 
@@ -841,6 +842,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             image_url: jobInput.imageUrl,
             video_url: jobInput.videoUrl,
             resolution: jobInput.resolution ?? '720',
+            aspectRatio: jobInput.aspectRatio ?? '16:9',
             jobId: ourJobId
           });
 

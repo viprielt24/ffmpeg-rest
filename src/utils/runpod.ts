@@ -22,6 +22,7 @@ interface IInfiniteTalkJobInput {
   video_url?: string;
   audio_url: string;
   resolution?: '480' | '720';
+  aspectRatio?: '16:9' | '9:16';
   jobId?: string;
 }
 
@@ -144,13 +145,16 @@ class RunPodClient implements IRunPodClient {
       person_count: 'single'
     };
 
-    // Set dimensions based on resolution
+    // Set dimensions based on resolution and aspect ratio
+    // 720p: 1280x720 (16:9) or 720x1280 (9:16)
+    // 480p: 832x480 (16:9) or 480x832 (9:16)
+    const isVertical = input.aspectRatio === '9:16';
     if (input.resolution === '720') {
-      runpodInput.width = 1280;
-      runpodInput.height = 720;
+      runpodInput.width = isVertical ? 720 : 1280;
+      runpodInput.height = isVertical ? 1280 : 720;
     } else {
-      runpodInput.width = 854;
-      runpodInput.height = 480;
+      runpodInput.width = isVertical ? 480 : 832;
+      runpodInput.height = isVertical ? 832 : 480;
     }
 
     if (input.image_url) {
