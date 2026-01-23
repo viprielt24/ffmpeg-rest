@@ -98,9 +98,9 @@ export const InfiniteTalkRequestSchema = z.object({
     description: 'Output resolution (480 or 720)',
     example: '720'
   }),
-  provider: z.enum(['modal', 'runpod']).default('modal').optional().openapi({
-    description: 'GPU provider to use (modal or runpod). Defaults to modal.',
-    example: 'modal'
+  aspectRatio: z.enum(['16:9', '9:16']).default('16:9').optional().openapi({
+    description: 'Output aspect ratio (16:9 horizontal or 9:16 vertical)',
+    example: '16:9'
   }),
   webhookUrl: z.string().url().optional().openapi({
     description: 'URL to call when processing completes'
@@ -126,6 +126,10 @@ export const BulkInfiniteTalkJobSchema = z.object({
   resolution: z.enum(['480', '720']).default('720').optional().openapi({
     description: 'Output resolution (480 or 720)',
     example: '720'
+  }),
+  aspectRatio: z.enum(['16:9', '9:16']).default('16:9').optional().openapi({
+    description: 'Output aspect ratio (16:9 horizontal or 9:16 vertical)',
+    example: '16:9'
   })
 });
 
@@ -134,10 +138,6 @@ export type IBulkInfiniteTalkJob = z.infer<typeof BulkInfiniteTalkJobSchema>;
 export const BulkInfiniteTalkRequestSchema = z.object({
   jobs: z.array(BulkInfiniteTalkJobSchema).min(1).max(50).openapi({
     description: 'Array of InfiniteTalk jobs to process (1-50 jobs)'
-  }),
-  provider: z.enum(['modal', 'runpod']).default('modal').optional().openapi({
-    description: 'GPU provider to use (modal or runpod). Defaults to modal.',
-    example: 'modal'
   }),
   webhookUrl: z.string().url().optional().openapi({
     description: 'URL to call when ALL jobs complete'
@@ -354,7 +354,7 @@ export const generateRoute = createRoute({
   tags: ['Generate'],
   summary: 'Create AI generation job',
   description:
-    'Queue an AI generation job. Supports LTX-2 (image-to-video), Wav2Lip (lip-sync), and Z-Image (text-to-image). Jobs are processed by external GPU workers.',
+    'Queue an AI generation job. Supports InfiniteTalk (audio-driven video), Wav2Lip (lip-sync), and Z-Image (text-to-image). Jobs are processed by external GPU workers.',
   request: {
     body: {
       content: {

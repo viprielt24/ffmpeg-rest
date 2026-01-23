@@ -48,7 +48,7 @@ def notify_complete(
 
     Args:
         job_id: The job ID
-        model: Model type (ltx2, wav2lip, zimage)
+        model: Model type (wav2lip, zimage, infinitetalk)
         result: Result dictionary with url, contentType, etc.
         webhook_url: Optional external webhook URL
     """
@@ -79,7 +79,7 @@ def notify_failed(
 
     Args:
         job_id: The job ID
-        model: Model type (ltx2, wav2lip, zimage)
+        model: Model type (wav2lip, zimage, infinitetalk)
         error: Error message
         webhook_url: Optional external webhook URL
     """

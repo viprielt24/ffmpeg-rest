@@ -25,7 +25,7 @@ class BullMQClient:
 
         Args:
             redis_url: Redis connection URL
-            queue_name: Name of the BullMQ queue (e.g., "generate:ltx2")
+            queue_name: Name of the BullMQ queue (e.g., "generate:wav2lip")
         """
         self.redis = redis.from_url(redis_url)
         self.queue_name = queue_name
