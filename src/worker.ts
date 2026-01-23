@@ -44,6 +44,15 @@ const worker = new Worker<unknown, JobResult>(
         return processConcatenateVideos(job as never);
       case JobType.NORMALIZE_VIDEO:
         return processNormalizeVideo(job as never);
+
+      // GPU jobs are processed by external providers (WaveSpeed, RunPod)
+      // They're added to the queue for tracking but shouldn't be processed by this worker
+      case JobType.GENERATE_WAV2LIP:
+      case JobType.GENERATE_ZIMAGE:
+      case JobType.GENERATE_INFINITETALK:
+        logger.info({ jobId: job.id, jobType: job.name }, 'Skipping GPU job - handled by external provider');
+        return { success: true, message: 'GPU job handled externally' };
+
       default:
         throw new Error(`Unknown job type: ${job.name}`);
     }
