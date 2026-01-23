@@ -38,15 +38,15 @@ Authorization: Bearer YOUR_AUTH_TOKEN
 
 ## AI Generation Endpoints
 
-GPU-powered AI video and image generation. Jobs are processed on Modal.com or RunPod serverless infrastructure.
+GPU-powered AI video and image generation. Jobs are processed on RunPod serverless infrastructure.
 
 ### Supported Models
 
-| Model | Type | Description | Provider |
-|-------|------|-------------|----------|
-| `infinitetalk` | Audio-to-Video | Generate talking head videos from audio + portrait | Modal (default) or RunPod |
-| `zimage` | Text-to-Image | Generate images from text prompts (Kolors Turbo) | RunPod |
-| `wav2lip` | Lip-Sync | Sync existing video lips to new audio | RunPod |
+| Model | Type | Description |
+|-------|------|-------------|
+| `infinitetalk` | Audio-to-Video | Generate talking head videos from audio + portrait |
+| `zimage` | Text-to-Image | Generate images from text prompts (Kolors Turbo) |
+| `wav2lip` | Lip-Sync | Sync existing video lips to new audio |
 
 ---
 
@@ -107,7 +107,7 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate 
     "audioUrl": "https://example.com/speech.wav",
     "imageUrl": "https://example.com/portrait.jpg",
     "resolution": "720",
-    "provider": "modal",
+    "aspectRatio": "16:9",
     "webhookUrl": "https://example.com/webhook"
   }'
 ```
@@ -118,17 +118,26 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate 
 | `audioUrl` | string | Yes | - | URL to audio file (WAV/MP3). Audio length determines video length. |
 | `imageUrl` | string | One of* | - | URL to portrait image (JPG/PNG). Face should be clearly visible. |
 | `videoUrl` | string | One of* | - | URL to reference video (MP4). Alternative to imageUrl. |
-| `resolution` | string | No | `"720"` | Output resolution: `"480"` (854x480) or `"720"` (1280x720) |
-| `provider` | string | No | `"modal"` | GPU provider: `"modal"` (recommended) or `"runpod"` |
+| `resolution` | string | No | `"720"` | Output resolution: `"480"` or `"720"` |
+| `aspectRatio` | string | No | `"16:9"` | Aspect ratio: `"16:9"` (horizontal) or `"9:16"` (vertical/portrait) |
 | `webhookUrl` | string | No | - | Callback URL when job completes |
 
 *\*Provide either `imageUrl` OR `videoUrl`, not both.*
+
+**Output dimensions by resolution and aspect ratio:**
+
+| Resolution | Aspect Ratio | Dimensions |
+|------------|--------------|------------|
+| 720 | 16:9 | 1280x720 |
+| 720 | 9:16 | 720x1280 |
+| 480 | 16:9 | 832x480 |
+| 480 | 9:16 | 480x832 |
 
 **Best practices:**
 - Use high-quality portrait images with clear, front-facing faces
 - Audio should be clear speech (WAV format preferred)
 - 720p resolution provides better quality but takes longer to process
-- Modal provider is faster and recommended for most use cases
+- Use `9:16` aspect ratio for TikTok/Reels/Shorts vertical videos
 
 **Output:** MP4 video with the portrait animated to match the audio.
 
@@ -231,15 +240,18 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/
     "jobs": [
       {
         "audioUrl": "https://example.com/audio1.wav",
-        "imageUrl": "https://example.com/portrait.jpg"
+        "imageUrl": "https://example.com/portrait.jpg",
+        "aspectRatio": "9:16"
       },
       {
         "audioUrl": "https://example.com/audio2.wav",
-        "imageUrl": "https://example.com/portrait.jpg"
+        "imageUrl": "https://example.com/portrait.jpg",
+        "aspectRatio": "9:16"
       },
       {
         "audioUrl": "https://example.com/audio3.wav",
-        "imageUrl": "https://example.com/portrait.jpg"
+        "imageUrl": "https://example.com/portrait.jpg",
+        "aspectRatio": "9:16"
       }
     ],
     "webhookUrl": "https://example.com/batch-webhook"
@@ -248,7 +260,7 @@ curl -X POST https://ffmpeg-rest-production-850b.up.railway.app/api/v1/generate/
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `jobs` | array | Yes | Array of job objects (1-50 jobs). Each job has same params as single endpoint (except webhookUrl) |
+| `jobs` | array | Yes | Array of job objects (1-50 jobs). Each job supports: `audioUrl`, `imageUrl`/`videoUrl`, `resolution`, `aspectRatio` |
 | `webhookUrl` | string | No | Callback URL when ALL jobs complete |
 
 **Response (202 Accepted):**

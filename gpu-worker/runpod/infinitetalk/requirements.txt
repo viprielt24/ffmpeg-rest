@@ -1,0 +1,9 @@
+# RunPod InfiniteTalk requirements
+# Note: Most dependencies are installed via InfiniteTalk's requirements.txt in Dockerfile
+
+runpod>=1.6.0
+boto3>=1.34.0
+huggingface_hub>=0.25.0
+librosa>=0.10.0
+soundfile>=0.12.0
+misaki[en]>=0.7.0

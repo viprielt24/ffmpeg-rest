@@ -9,7 +9,7 @@ class Settings:
     """Worker settings loaded from environment variables."""
 
     # Model type this worker handles
-    MODEL_TYPE: str = os.environ.get("MODEL_TYPE", "ltx2")
+    MODEL_TYPE: str = os.environ.get("MODEL_TYPE", "wav2lip")
 
     # Redis
     REDIS_URL: str = os.environ.get("REDIS_URL", "redis://localhost:6379")
@@ -26,7 +26,6 @@ class Settings:
     WEBHOOK_SECRET: str = os.environ.get("WEBHOOK_SECRET", "")
 
     # Model paths
-    LTX2_MODEL_PATH: str = os.environ.get("LTX2_MODEL_PATH", "Lightricks/LTX-Video")
     WAV2LIP_MODEL_PATH: str = os.environ.get("WAV2LIP_MODEL_PATH", "/workspace/models/wav2lip")
     ZIMAGE_MODEL_PATH: str = os.environ.get("ZIMAGE_MODEL_PATH", "Tongyi-MAI/Z-Image-Turbo")
 
