@@ -18,7 +18,7 @@ import { logger } from '~/config/logger';
 import { env } from '~/config/env';
 import { sendWebhook, sendBatchWebhook } from '~/utils/webhook';
 import { runpodClient } from '~/utils/runpod';
-import { modalClient } from '~/utils/modal';
+import { wavespeedClient } from '~/utils/wavespeed';
 import { uploadBufferToS3 } from '~/utils/storage';
 import { createBatch, getBatch, markBatchWebhookSent, type IBatchJobResult } from '~/utils/batch';
 
@@ -140,18 +140,27 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
 
         case 'infinitetalk': {
           // Determine which provider to use based on request or availability
-          const requestedProvider = body.provider ?? 'modal';
-          const useModal = requestedProvider === 'modal' && modalClient.isConfigured();
-          const useRunPod = requestedProvider === 'runpod' && runpodClient.isConfigured('infinitetalk');
+          // WaveSpeed only supports image input, so auto-fallback to RunPod for video input
+          const requestedProvider = body.provider ?? 'wavespeed';
+          const hasVideoInput = body.videoUrl && !body.imageUrl;
 
-          // If requested provider is not configured, try the other one
-          const fallbackToModal = !useRunPod && requestedProvider === 'runpod' && modalClient.isConfigured();
+          // Force RunPod if video input is provided (WaveSpeed only supports images)
+          const forceRunPod = hasVideoInput;
+
+          const useWaveSpeed = !forceRunPod && requestedProvider === 'wavespeed' && wavespeedClient.isConfigured();
+          const useRunPod =
+            (forceRunPod || requestedProvider === 'runpod') && runpodClient.isConfigured('infinitetalk');
+
+          // Fallback logic: WaveSpeed -> RunPod
           const fallbackToRunPod =
-            !useModal && requestedProvider === 'modal' && runpodClient.isConfigured('infinitetalk');
+            !useWaveSpeed && requestedProvider === 'wavespeed' && runpodClient.isConfigured('infinitetalk');
 
-          if (useModal || fallbackToModal) {
-            const provider = fallbackToModal ? 'Modal (fallback)' : 'Modal';
-            logger.info({ model, provider }, 'Using Modal for InfiniteTalk job');
+          if (useWaveSpeed) {
+            logger.info({ model, provider: 'WaveSpeed' }, 'Using WaveSpeed for InfiniteTalk job');
+
+            // Map resolution to WaveSpeed format
+            const resolution = body.resolution ?? '720';
+            const wavespeedResolution = resolution === '720' ? '720p' : '480p';
 
             const placeholderData = {
               type: jobType,
@@ -159,29 +168,32 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
               audioUrl: body.audioUrl,
               imageUrl: body.imageUrl,
               videoUrl: body.videoUrl,
-              resolution: body.resolution ?? '720',
+              resolution,
+              aspectRatio: body.aspectRatio ?? '9:16',
               webhookUrl: body.webhookUrl,
               createdAt: Date.now(),
-              useModal: true,
-              modalJobId: ''
+              useWaveSpeed: true,
+              wavespeedJobId: ''
             };
 
             const job = await queue.add(jobType, placeholderData);
             const ourJobId = job.id ?? '';
 
-            const modalResponse = await modalClient.submitInfiniteTalkJob({
-              audio_url: body.audioUrl ?? '',
-              image_url: body.imageUrl,
-              video_url: body.videoUrl,
-              resolution: body.resolution ?? '720'
+            const wavespeedResponse = await wavespeedClient.submitInfiniteTalkJob({
+              audio: body.audioUrl ?? '',
+              image: body.imageUrl ?? '',
+              resolution: wavespeedResolution
             });
 
             await job.updateData({
               ...placeholderData,
-              modalJobId: modalResponse.job_id
+              wavespeedJobId: wavespeedResponse.job_id
             });
 
-            logger.info({ jobId: ourJobId, modalJobId: modalResponse.job_id }, 'InfiniteTalk job submitted to Modal');
+            logger.info(
+              { jobId: ourJobId, wavespeedJobId: wavespeedResponse.job_id },
+              'InfiniteTalk job submitted to WaveSpeed'
+            );
 
             return c.json(
               {
@@ -189,14 +201,14 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
                 jobId: ourJobId,
                 model,
                 status: 'queued' as const,
-                message: 'Job queued on Modal. Poll GET /api/v1/generate/{jobId} for status.'
+                message: 'Job queued on WaveSpeed. Poll GET /api/v1/generate/{jobId} for status.'
               },
               202
             );
           }
 
           if (useRunPod || fallbackToRunPod) {
-            const provider = fallbackToRunPod ? 'RunPod (fallback)' : 'RunPod';
+            const provider = fallbackToRunPod ? 'RunPod (fallback)' : forceRunPod ? 'RunPod (video input)' : 'RunPod';
             logger.info({ model, provider }, 'Using RunPod for InfiniteTalk job');
 
             const placeholderData = {
@@ -206,6 +218,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
               imageUrl: body.imageUrl,
               videoUrl: body.videoUrl,
               resolution: body.resolution ?? '720',
+              aspectRatio: body.aspectRatio ?? '9:16',
               webhookUrl: body.webhookUrl,
               createdAt: Date.now(),
               useRunPod: true,
@@ -221,7 +234,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
               image_url: body.imageUrl,
               video_url: body.videoUrl,
               resolution: body.resolution ?? '720',
-              aspectRatio: body.aspectRatio ?? '16:9',
+              aspectRatio: body.aspectRatio ?? '9:16',
               jobId: ourJobId
             });
 
@@ -244,7 +257,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             );
           }
 
-          // Fallback to BullMQ if neither Modal nor RunPod configured
+          // Fallback to BullMQ if neither WaveSpeed nor RunPod configured
           jobData = {
             type: jobType,
             model: 'infinitetalk',
@@ -252,6 +265,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             imageUrl: body.imageUrl,
             videoUrl: body.videoUrl,
             resolution: body.resolution ?? '720',
+            aspectRatio: body.aspectRatio ?? '9:16',
             webhookUrl: body.webhookUrl,
             createdAt: Date.now()
           };
@@ -298,20 +312,23 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
         useRunPod?: boolean;
         runpodJobId?: string;
         runpodEndpointType?: 'zimage' | 'infinitetalk';
-        useModal?: boolean;
-        modalJobId?: string;
+        useWaveSpeed?: boolean;
+        wavespeedJobId?: string;
         webhookUrl?: string;
         uploadedUrl?: string; // Cached URL for base64 video uploads
       };
 
-      // If this is a Modal job, fetch status from Modal
-      if (jobData.useModal && jobData.modalJobId && modalClient.isConfigured()) {
-        const modalStatus = await modalClient.getJobStatus(jobData.modalJobId);
+      // If this is a WaveSpeed job, fetch status from WaveSpeed
+      if (jobData.useWaveSpeed && jobData.wavespeedJobId && wavespeedClient.isConfigured()) {
+        const wavespeedStatus = await wavespeedClient.getJobStatus(jobData.wavespeedJobId);
         const createdAt = new Date(jobData.createdAt ?? job.timestamp).toISOString();
         const model: GenerateModel = (jobData.model as GenerateModel) ?? 'infinitetalk';
 
-        switch (modalStatus.status) {
-          case 'queued':
+        // Map WaveSpeed status to our status
+        const status = wavespeedStatus.data.status;
+
+        switch (status) {
+          case 'pending':
             return c.json(
               {
                 status: 'queued' as const,
@@ -328,7 +345,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
                 status: 'processing' as const,
                 jobId,
                 model,
-                progress: 50, // Modal doesn't provide granular progress
+                progress: 50, // WaveSpeed doesn't provide granular progress
                 startedAt: createdAt,
                 createdAt
               },
@@ -336,47 +353,25 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             );
 
           case 'completed': {
-            if (modalStatus.video) {
-              let resultUrl: string;
-              let fileSizeBytes: number;
+            // WaveSpeed returns direct URLs in data.outputs[]
+            const outputs = wavespeedStatus.data.outputs;
+            if (outputs && outputs.length > 0) {
+              const resultUrl = outputs[0] ?? '';
               const contentType = 'video/mp4';
+              const fileSizeBytes = 0; // WaveSpeed doesn't provide file size
 
-              // Check if we already uploaded this (cached URL)
-              if (jobData.uploadedUrl) {
-                resultUrl = jobData.uploadedUrl;
-                const cachedResult = (job.data as Record<string, unknown>)['completedResult'] as
-                  | { fileSizeBytes?: number }
-                  | undefined;
-                fileSizeBytes = cachedResult?.fileSizeBytes ?? 0;
-                logger.info({ jobId, url: resultUrl }, 'Using cached Modal upload URL');
-              } else {
-                // Decode base64 and upload to R2
-                logger.info({ jobId }, 'Decoding Modal base64 video and uploading to R2');
-                const videoBuffer = Buffer.from(modalStatus.video, 'base64');
-                fileSizeBytes = videoBuffer.length;
-
-                const uploadResult = await uploadBufferToS3(
-                  videoBuffer,
+              // Update job data with result
+              const currentData = job.data as Record<string, unknown>;
+              await job.updateData({
+                ...currentData,
+                uploadedUrl: resultUrl,
+                completedResult: {
+                  url: resultUrl,
                   contentType,
-                  `infinitetalk-modal-${jobId}.mp4`
-                );
-                resultUrl = uploadResult.url;
-
-                // Cache the uploaded URL in job data
-                const currentData = job.data as Record<string, unknown>;
-                await job.updateData({
-                  ...currentData,
-                  uploadedUrl: resultUrl,
-                  completedResult: {
-                    url: resultUrl,
-                    contentType,
-                    fileSizeBytes,
-                    processingTimeMs: 0
-                  }
-                });
-
-                logger.info({ jobId, url: resultUrl, size: fileSizeBytes }, 'Modal InfiniteTalk video uploaded to R2');
-              }
+                  fileSizeBytes,
+                  processingTimeMs: 0
+                }
+              });
 
               // Send webhook if configured
               if (jobData.webhookUrl) {
@@ -410,7 +405,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
           }
 
           case 'failed': {
-            const errorMsg = modalStatus.error ?? 'Job failed on Modal';
+            const errorMsg = wavespeedStatus.data.error ?? 'Job failed on WaveSpeed';
 
             // Update job data with error
             const failedJobData = job.data as Record<string, unknown>;
@@ -775,78 +770,138 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
   app.openapi(bulkInfiniteTalkRoute, async (c) => {
     try {
       const body = c.req.valid('json') as IBulkInfiniteTalkRequest;
-      const { jobs, webhookUrl, provider: requestedProvider = 'modal' } = body;
+      const { jobs, webhookUrl, provider: requestedProvider = 'wavespeed' } = body;
 
       // Determine which provider to use based on request or availability
-      let useModal = requestedProvider === 'modal' && modalClient.isConfigured();
-      let useRunPod = requestedProvider === 'runpod' && runpodClient.isConfigured('infinitetalk');
+      // Check if any jobs have video input (WaveSpeed only supports images)
+      const hasVideoInput = jobs.some((job) => job.videoUrl && !job.imageUrl);
+      const forceRunPod = hasVideoInput;
+
+      let useWaveSpeed = !forceRunPod && requestedProvider === 'wavespeed' && wavespeedClient.isConfigured();
+      let useRunPod = (forceRunPod || requestedProvider === 'runpod') && runpodClient.isConfigured('infinitetalk');
 
       // Fallback if requested provider is not configured
-      if (!useModal && !useRunPod) {
-        useModal = modalClient.isConfigured();
-        useRunPod = !useModal && runpodClient.isConfigured('infinitetalk');
+      if (!useWaveSpeed && !useRunPod) {
+        useWaveSpeed = wavespeedClient.isConfigured();
+        useRunPod = !useWaveSpeed && runpodClient.isConfigured('infinitetalk');
       }
 
-      if (!useModal && !useRunPod) {
-        return c.json({ error: 'InfiniteTalk is not configured on Modal or RunPod' }, 500);
+      if (!useWaveSpeed && !useRunPod) {
+        return c.json({ error: 'InfiniteTalk is not configured on WaveSpeed or RunPod' }, 500);
       }
 
-      const provider = useModal ? 'Modal' : 'RunPod';
+      const provider = useWaveSpeed ? 'WaveSpeed' : 'RunPod';
       logger.info({ jobCount: jobs.length, webhookUrl, provider }, 'Processing bulk InfiniteTalk request');
 
-      // Submit all jobs in parallel
-      const jobPromises = jobs.map(async (jobInput, index) => {
-        // Create a placeholder job in queue to track status
-        const placeholderData = {
-          type: JobType.GENERATE_INFINITETALK,
-          model: 'infinitetalk',
-          audioUrl: jobInput.audioUrl,
-          imageUrl: jobInput.imageUrl,
-          videoUrl: jobInput.videoUrl,
-          resolution: jobInput.resolution ?? '720',
-          createdAt: Date.now(),
-          useModal,
-          useRunPod,
-          modalJobId: '',
-          runpodJobId: '',
-          runpodEndpointType: 'infinitetalk' as const,
-          isBulkJob: true
-        };
+      // Helper to chunk array for batch processing
+      const chunkArray = <T>(array: T[], size: number): T[][] => {
+        const chunks: T[][] = [];
+        for (let i = 0; i < array.length; i += size) {
+          chunks.push(array.slice(i, i + size));
+        }
+        return chunks;
+      };
 
-        const job = await queue.add(JobType.GENERATE_INFINITETALK, placeholderData);
-        const ourJobId = job.id ?? '';
+      const submittedJobs: { jobId: string; status: 'queued' }[] = [];
 
-        if (useModal) {
-          // Submit to Modal
-          const modalResponse = await modalClient.submitInfiniteTalkJob({
-            audio_url: jobInput.audioUrl,
-            image_url: jobInput.imageUrl,
-            video_url: jobInput.videoUrl,
-            resolution: jobInput.resolution ?? '720'
+      if (useWaveSpeed) {
+        // Process WaveSpeed jobs in chunks of 3 for rate limiting
+        const maxConcurrent = 3;
+        const chunks = chunkArray(jobs, maxConcurrent);
+
+        logger.info(
+          { totalJobs: jobs.length, chunks: chunks.length, maxConcurrent },
+          'Processing WaveSpeed bulk in chunks'
+        );
+
+        for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+          const chunk = chunks[chunkIndex];
+          if (!chunk) continue;
+
+          logger.info({ chunkIndex, chunkSize: chunk.length }, 'Processing WaveSpeed chunk');
+
+          // Process chunk in parallel
+          const chunkPromises = chunk.map(async (jobInput, indexInChunk) => {
+            const globalIndex = chunkIndex * maxConcurrent + indexInChunk;
+
+            // Create a placeholder job in queue to track status
+            const placeholderData = {
+              type: JobType.GENERATE_INFINITETALK,
+              model: 'infinitetalk',
+              audioUrl: jobInput.audioUrl,
+              imageUrl: jobInput.imageUrl,
+              videoUrl: jobInput.videoUrl,
+              resolution: jobInput.resolution ?? '720',
+              aspectRatio: jobInput.aspectRatio ?? '9:16',
+              createdAt: Date.now(),
+              useWaveSpeed: true,
+              wavespeedJobId: '',
+              isBulkJob: true
+            };
+
+            const job = await queue.add(JobType.GENERATE_INFINITETALK, placeholderData);
+            const ourJobId = job.id ?? '';
+
+            // Map resolution to WaveSpeed format
+            const resolution = jobInput.resolution ?? '720';
+            const wavespeedResolution = resolution === '720' ? '720p' : '480p';
+
+            const wavespeedResponse = await wavespeedClient.submitInfiniteTalkJob({
+              audio: jobInput.audioUrl,
+              image: jobInput.imageUrl ?? '',
+              resolution: wavespeedResolution
+            });
+
+            // Update job with WaveSpeed job ID
+            await job.updateData({
+              ...placeholderData,
+              wavespeedJobId: wavespeedResponse.job_id
+            });
+
+            logger.info(
+              { jobId: ourJobId, wavespeedJobId: wavespeedResponse.job_id, index: globalIndex },
+              'Bulk InfiniteTalk job submitted to WaveSpeed'
+            );
+
+            return {
+              jobId: ourJobId,
+              status: 'queued' as const
+            };
           });
 
-          // Update job with Modal job ID
-          await job.updateData({
-            ...placeholderData,
-            modalJobId: modalResponse.job_id
-          });
+          const chunkResults = await Promise.all(chunkPromises);
+          submittedJobs.push(...chunkResults);
+        }
+      } else {
+        // Submit all RunPod jobs in parallel (existing behavior)
+        const jobPromises = jobs.map(async (jobInput, index) => {
+          const placeholderData = {
+            type: JobType.GENERATE_INFINITETALK,
+            model: 'infinitetalk',
+            audioUrl: jobInput.audioUrl,
+            imageUrl: jobInput.imageUrl,
+            videoUrl: jobInput.videoUrl,
+            resolution: jobInput.resolution ?? '720',
+            aspectRatio: jobInput.aspectRatio ?? '9:16',
+            createdAt: Date.now(),
+            useRunPod: true,
+            runpodJobId: '',
+            runpodEndpointType: 'infinitetalk' as const,
+            isBulkJob: true
+          };
 
-          logger.info(
-            { jobId: ourJobId, modalJobId: modalResponse.job_id, index },
-            'Bulk InfiniteTalk job submitted to Modal'
-          );
-        } else {
-          // Submit to RunPod
+          const job = await queue.add(JobType.GENERATE_INFINITETALK, placeholderData);
+          const ourJobId = job.id ?? '';
+
           const runpodResponse = await runpodClient.submitInfiniteTalkJob({
             audio_url: jobInput.audioUrl,
             image_url: jobInput.imageUrl,
             video_url: jobInput.videoUrl,
             resolution: jobInput.resolution ?? '720',
-            aspectRatio: jobInput.aspectRatio ?? '16:9',
+            aspectRatio: jobInput.aspectRatio ?? '9:16',
             jobId: ourJobId
           });
 
-          // Update job with RunPod job ID
           await job.updateData({
             ...placeholderData,
             runpodJobId: runpodResponse.id
@@ -856,16 +911,17 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             { jobId: ourJobId, runpodJobId: runpodResponse.id, index },
             'Bulk InfiniteTalk job submitted to RunPod'
           );
-        }
 
-        return {
-          jobId: ourJobId,
-          status: 'queued' as const
-        };
-      });
+          return {
+            jobId: ourJobId,
+            status: 'queued' as const
+          };
+        });
 
-      // Wait for all job submissions
-      const submittedJobs = await Promise.all(jobPromises);
+        const results = await Promise.all(jobPromises);
+        submittedJobs.push(...results);
+      }
+
       const jobIds = submittedJobs.map((j) => j.jobId);
 
       // Create batch for tracking
@@ -923,9 +979,9 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
 
         const jobData = job.data as {
           useRunPod?: boolean;
-          useModal?: boolean;
+          useWaveSpeed?: boolean;
           runpodJobId?: string;
-          modalJobId?: string;
+          wavespeedJobId?: string;
           runpodEndpointType?: 'infinitetalk';
           uploadedUrl?: string;
           completedResult?: {
@@ -936,13 +992,14 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
           failedError?: string;
         };
 
-        // If this is a Modal job, fetch status from Modal
-        if (jobData.useModal && jobData.modalJobId && modalClient.isConfigured()) {
+        // If this is a WaveSpeed job, fetch status from WaveSpeed
+        if (jobData.useWaveSpeed && jobData.wavespeedJobId && wavespeedClient.isConfigured()) {
           try {
-            const modalStatus = await modalClient.getJobStatus(jobData.modalJobId);
+            const wavespeedStatus = await wavespeedClient.getJobStatus(jobData.wavespeedJobId);
+            const status = wavespeedStatus.data.status;
 
-            switch (modalStatus.status) {
-              case 'queued':
+            switch (status) {
+              case 'pending':
                 jobResults.push({ jobId, status: 'queued' });
                 break;
 
@@ -951,34 +1008,20 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
                 break;
 
               case 'completed': {
-                if (modalStatus.video) {
-                  let resultUrl = '';
-                  let fileSizeBytes = 0;
+                const outputs = wavespeedStatus.data.outputs;
+                if (outputs && outputs.length > 0) {
+                  const resultUrl = outputs[0] ?? '';
+                  const fileSizeBytes = 0; // WaveSpeed doesn't provide file size
                   const processingTimeMs = 0;
 
-                  // Upload to R2 if not cached
+                  // Update job data with result (cache URL)
                   if (!jobData.uploadedUrl) {
-                    logger.info({ jobId }, 'Decoding batch Modal base64 video and uploading to R2');
-                    const videoBuffer = Buffer.from(modalStatus.video, 'base64');
-                    fileSizeBytes = videoBuffer.length;
-
-                    const uploadResult = await uploadBufferToS3(
-                      videoBuffer,
-                      'video/mp4',
-                      `infinitetalk-modal-${jobId}.mp4`
-                    );
-                    resultUrl = uploadResult.url;
-
-                    // Cache the uploaded URL
                     const currentData = job.data as Record<string, unknown>;
                     await job.updateData({
                       ...currentData,
                       uploadedUrl: resultUrl,
                       completedResult: { url: resultUrl, fileSizeBytes, processingTimeMs }
                     });
-                  } else {
-                    resultUrl = jobData.uploadedUrl;
-                    fileSizeBytes = jobData.completedResult?.fileSizeBytes ?? fileSizeBytes;
                   }
 
                   jobResults.push({
@@ -995,7 +1038,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
               }
 
               case 'failed': {
-                const errorMsg = modalStatus.error ?? 'Job failed on Modal';
+                const errorMsg = wavespeedStatus.data.error ?? 'Job failed on WaveSpeed';
                 jobResults.push({ jobId, status: 'failed', error: errorMsg });
                 failedCount++;
                 break;
@@ -1006,7 +1049,7 @@ export function registerGenerateRoutes(app: OpenAPIHono) {
             }
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            logger.error({ jobId, error: errMsg }, 'Failed to fetch Modal job status');
+            logger.error({ jobId, error: errMsg }, 'Failed to fetch WaveSpeed job status');
             jobResults.push({ jobId, status: 'failed', error: errMsg });
             failedCount++;
           }

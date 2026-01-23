@@ -15,7 +15,7 @@ export const JobType = {
   MUX_VIDEO_AUDIO: 'mux:video-audio',
   CONCATENATE_VIDEOS: 'concatenate:videos',
   NORMALIZE_VIDEO: 'normalize:video',
-  // AI Generation job types (processed by external GPU workers, RunPod, or Modal)
+  // AI Generation job types (processed by external GPU workers, WaveSpeed, or RunPod)
   GENERATE_WAV2LIP: 'generate:wav2lip',
   GENERATE_ZIMAGE: 'generate:zimage',
   GENERATE_INFINITETALK: 'generate:infinitetalk'
