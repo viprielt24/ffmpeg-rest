@@ -70,12 +70,21 @@ export async function processMuxVideoAudio(job: Job<IMuxVideoAudioJobData>): Pro
     logger.info({ jobId }, 'Input files downloaded, starting FFmpeg mux');
 
     // Build FFmpeg args
+    // Use tpad to freeze the last video frame so audio is never cut short.
+    // -shortest then stops at whichever stream ends first (now the audio,
+    // since the video is padded indefinitely).
     const ffmpegArgs = [
       '-y',
       '-i',
       videoPath,
       '-i',
       audioPath,
+      '-filter_complex',
+      '[0:v]tpad=stop_mode=clone:stop=-1[v]',
+      '-map',
+      '[v]',
+      '-map',
+      '1:a',
       '-c:v',
       'libx264',
       '-preset',
