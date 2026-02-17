@@ -66,6 +66,13 @@ const worker = new Worker<unknown, JobResult>(
 worker.on('completed', async (job, result: JobResult) => {
   logger.info({ jobId: job.id }, 'Job completed successfully');
 
+  // GPU jobs (WaveSpeed/RunPod) send webhooks from the GET status endpoint
+  // when the external provider reports completion — not from the BullMQ worker.
+  const isGpuJob = [JobType.GENERATE_WAV2LIP, JobType.GENERATE_ZIMAGE, JobType.GENERATE_INFINITETALK].includes(
+    job.name as JobType
+  );
+  if (isGpuJob) return;
+
   // Send webhook if configured
   const jobData = job.data as { webhookUrl?: string };
   if (jobData.webhookUrl && job.id) {
